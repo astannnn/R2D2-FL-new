@@ -15,7 +15,7 @@ class Config:
 
     # ===== Noise setup =====
     NOISE_CLIENT_RATIO = 0.5
-    NOISE_RATE = 0.0
+    NOISE_RATE = 0.2
     NOISE_TYPE = "symmetric"   # symmetric / asymmetric / heterogeneous
 
     # ===== Proxy =====

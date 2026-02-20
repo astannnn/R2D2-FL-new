@@ -254,7 +254,7 @@ def main():
     global_model = SimpleCNN().to(config.DEVICE)
     server = Server(global_model)
 
-    log_path = "robustness_noisy.csv"
+    log_path = f"noise_{int(config.NOISE_RATE*100)}.csv"
 
     with open(log_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -286,17 +286,17 @@ def main():
                     server.global_model.state_dict()
                 )
 
-                w = client.local_train()
+                w = client.local_train(global_model=server.global_model)
                 client_weights.append(w)
                 client_sizes.append(len(client.train_loader.dataset))
 
             server.aggregate(client_weights, client_sizes)
 
-            #server.distill(
-                #[client.model for client in selected_clients],
-                #proxy_dataset,
-                #config
-            #)
+            server.distill(
+                [client.model for client in selected_clients],
+                proxy_dataset,
+                config
+            )
 
             global_acc = evaluate_global(
                 server.global_model,
