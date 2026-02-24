@@ -26,6 +26,6 @@ class Config:
 
     # ===== R2D2-FL parameters =====
     TEMPERATURE = 2.0
-    BETA = 0.05
+    BETA = 0.1
     LAMBDA = 0.7
     CONF_THRESHOLD = 0.6

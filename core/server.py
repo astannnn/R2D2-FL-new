@@ -100,8 +100,12 @@ class Server:
         if print_stats:
             print("r_k:", [round(float(x), 4) for x in r_k])
 
-        sig_rk = torch.sigmoid(r_k)
-        sig_rkc = torch.sigmoid(r_kc)
+        sig_rk = torch.clamp(torch.sigmoid(r_k), 0.2, 0.8)
+        sig_rkc = torch.clamp(torch.sigmoid(r_kc), 0.2, 0.8)
+
+        device = next(self.global_model.parameters()).device
+        sig_rk = sig_rk.to(device)
+        sig_rkc = sig_rkc.to(device)
 
         # -------------------------------------------------
         # Proxy Distillation
@@ -182,6 +186,7 @@ class Server:
                 * (temperature ** 2)
             )
 
+            loss = config.BETA * loss_kd
             optimizer.zero_grad()
-            loss_kd.backward()
+            loss.backward()
             optimizer.step()
