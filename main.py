@@ -292,11 +292,12 @@ def main():
 
             server.aggregate(client_weights, client_sizes)
 
-            server.distill(
-                [client.model for client in selected_clients],
-                proxy_dataset,
-                config
-            )
+            if config.USE_R2D2:
+                server.distill(
+                    [client.model for client in selected_clients],
+                    proxy_dataset,
+                    config
+                )
 
             global_acc = evaluate_global(
                 server.global_model,
