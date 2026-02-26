@@ -25,8 +25,15 @@ class Config:
     SEED = 1
 
     # ===== R2D2-FL parameters =====
-    TEMPERATURE = 2.0
-    BETA = 0.1
-    LAMBDA = 0.7
-    CONF_THRESHOLD = 0.6
-    USE_R2D2 = False
+    USE_R2D2 = True
+
+    TEMPERATURE = 2.0          # tau
+    BETA = 0.1                 # local KD weight
+    LAMBDA = 0.7               # soft label correction weight
+    CONF_THRESHOLD = 0.6       # confidence threshold
+
+    # ===== Ablation switches =====
+    USE_RELIABILITY = True
+    USE_CLASS_RELIABILITY = True
+    USE_SOFT_CORRECTION = True
+    USE_LOCAL_KD = True
