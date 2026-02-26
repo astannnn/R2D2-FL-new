@@ -151,13 +151,23 @@ class Server:
                 ent = -(p_k * torch.log(p_k + eps)).sum(dim=1)
                 ent_norm = torch.clamp(ent / logC, 0.0, 1.0)
 
-                class_gate = sig_rkc[k, maj]
+                if getattr(config, "USE_RELIABILITY", True):
 
-                alphas[k] = (
-                    sig_rk[k]
-                    * class_gate
-                    * (1.0 - ent_norm)
-                )
+                    # ===== Class-level gate =====
+                    if getattr(config, "USE_CLASS_RELIABILITY", True):
+                        class_gate = sig_rkc[k, maj]
+                    else:
+                        class_gate = 1.0
+
+                    alphas[k] = (
+                        sig_rk[k]
+                        * class_gate
+                        * (1.0 - ent_norm)
+                    )
+
+                else:
+                    # Equal weights
+                    alphas[k] = torch.ones_like(ent_norm)
 
             alpha_sum = alphas.sum(dim=0, keepdim=True).clamp_min(1e-12)
             alphas = alphas / alpha_sum
