@@ -63,30 +63,47 @@ class Client:
                     else:
                         hard_loss = torch.tensor(0.0, device=device)
 
-                    # suspicious samples → soft correction
+                    # suspicious samples
                     if (~mask).sum() > 0:
-                        soft_labels = (
-                            self.config.LAMBDA * y_onehot[~mask]
-                            + (1 - self.config.LAMBDA) * teacher_probs[~mask]
-                        )
 
-                        ce_soft = -(soft_labels *
-                                    F.log_softmax(logits[~mask], dim=1)).sum(dim=1)
+                        if getattr(self.config, "USE_SOFT_CORRECTION", True):
 
-                        soft_loss = ce_soft.mean()
+                            # ===== Soft label correction =====
+                            soft_labels = (
+                                self.config.LAMBDA * y_onehot[~mask]
+                                + (1 - self.config.LAMBDA) * teacher_probs[~mask]
+                            )
+
+                            ce_soft = -(soft_labels *
+                                        F.log_softmax(logits[~mask], dim=1)).sum(dim=1)
+
+                            soft_loss = ce_soft.mean()
+
+                        else:
+                            # ===== Without soft correction → use hard labels =====
+                            soft_loss = F.cross_entropy(
+                                logits[~mask],
+                                y[~mask]
+                            )
+
                     else:
                         soft_loss = torch.tensor(0.0, device=device)
 
                     sup_loss = hard_loss + soft_loss
 
                     # ===== Local KD =====
-                    kd_loss = F.kl_div(
-                        F.log_softmax(logits / self.config.TEMPERATURE, dim=1),
-                        teacher_probs,
-                        reduction="batchmean"
-                    ) * (self.config.TEMPERATURE ** 2)
+                    if getattr(self.config, "USE_LOCAL_KD", True):
 
-                    loss = sup_loss + self.config.BETA * kd_loss
+                        kd_loss = F.kl_div(
+                            F.log_softmax(logits / self.config.TEMPERATURE, dim=1),
+                            teacher_probs,
+                            reduction="batchmean"
+                        ) * (self.config.TEMPERATURE ** 2)
+
+                        loss = sup_loss + self.config.BETA * kd_loss
+
+                    else:
+                        loss = sup_loss
 
                 loss.backward()
                 optimizer.step()
