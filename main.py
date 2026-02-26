@@ -133,7 +133,7 @@ def load_data(config):
 # Clients
 # =========================
 
-def create_clients(train_dataset, config):
+def create_clients(train_dataset, config, in_channels):
 
     labels = torch.tensor(train_dataset.targets)
 
@@ -168,7 +168,10 @@ def create_clients(train_dataset, config):
             shuffle=True
         )
 
-        model = SimpleCNN(num_classes=config.NUM_CLASSES).to(config.DEVICE)
+        model = SimpleCNN(
+            num_classes=config.NUM_CLASSES,
+            in_channels=in_channels
+        ).to(config.DEVICE)
         clients.append(Client(model, loader, config))
 
     return clients
@@ -240,6 +243,14 @@ def main():
     config = Config()
     set_seed(config.SEED)
 
+    # Determine input channels
+    if config.DATASET == "cifar10":
+        in_channels = 3
+    elif config.DATASET == "femnist":
+        in_channels = 1
+    else:
+        raise ValueError("Unknown dataset")
+
     print("=== CONFIG ===")
     print(f"DEVICE={config.DEVICE}")
     print(f"NUM_CLIENTS={config.NUM_CLIENTS}")
@@ -253,9 +264,12 @@ def main():
     print("==============")
 
     train_dataset, test_dataset, proxy_dataset = load_data(config)
-    clients = create_clients(train_dataset, config)
+    clients = create_clients(train_dataset, config, in_channels)
 
-    global_model = SimpleCNN(num_classes=config.NUM_CLASSES).to(config.DEVICE)
+    global_model = SimpleCNN(
+        num_classes=config.NUM_CLASSES,
+        in_channels=in_channels
+    ).to(config.DEVICE)
     server = Server(global_model)
 
     log_path = f"noise_{int(config.NOISE_RATE*100)}.csv"
