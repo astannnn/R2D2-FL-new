@@ -2,7 +2,10 @@ import torch
 
 
 class Config:
-
+    # ===== FedProx =====
+    USE_FEDPROX = False
+    MU = 0.01
+    
     # ===== FL setup =====
     NUM_CLIENTS = 8
     CLIENT_FRACTION = 0.75
