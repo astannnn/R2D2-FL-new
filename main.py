@@ -28,7 +28,7 @@ def set_seed(seed: int):
 # Noise
 # =========================
 
-def inject_symmetric_noise(dataset, indices, noise_rate, num_classes=10):
+def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
     targets = np.array(dataset.targets)
 
     n_noisy = int(len(indices) * noise_rate)
@@ -73,8 +73,7 @@ def inject_asymmetric_noise(dataset, indices, noise_rate):
 def apply_noise(dataset, indices, config, client_id):
 
     if config.NOISE_TYPE == "symmetric":
-        inject_symmetric_noise(dataset, indices, config.NOISE_RATE)
-
+        inject_symmetric_noise(dataset, indices, config.NOISE_RATE, config.NUM_CLASSES)
     elif config.NOISE_TYPE == "asymmetric":
         inject_asymmetric_noise(dataset, indices, config.NOISE_RATE)
 
@@ -84,7 +83,7 @@ def apply_noise(dataset, indices, config, client_id):
         else:
             rate = (client_id / (config.NUM_CLIENTS - 1)) * config.NOISE_RATE
 
-        inject_symmetric_noise(dataset, indices, rate)
+        inject_symmetric_noise(dataset, indices, rate, config.NUM_CLASSES)
 
     else:
         raise ValueError(f"Unknown NOISE_TYPE: {config.NOISE_TYPE}")
@@ -98,26 +97,31 @@ def load_data(config):
 
     transform = transforms.ToTensor()
 
-    train_dataset = datasets.CIFAR10(
-        root="./data",
-        train=True,
-        download=True,
-        transform=transform
-    )
+    if config.DATASET == "cifar10":
 
-    test_dataset = datasets.CIFAR10(
-        root="./data",
-        train=False,
-        download=True,
-        transform=transform
-    )
+        train_dataset = datasets.CIFAR10(
+            root="./data",
+            train=True,
+            download=True,
+            transform=transform
+        )
 
-    proxy_base = datasets.CIFAR10(
-        root="./data",
-        train=True,
-        download=True,
-        transform=transform
-    )
+        test_dataset = datasets.CIFAR10(
+            root="./data",
+            train=False,
+            download=True,
+            transform=transform
+        )
+
+        proxy_base = datasets.CIFAR10(
+            root="./data",
+            train=True,
+            download=True,
+            transform=transform
+        )
+
+    else:
+        raise NotImplementedError("FEMNIST not yet implemented")
 
     proxy_indices = list(range(config.PROXY_SIZE))
     proxy_dataset = Subset(proxy_base, proxy_indices)
@@ -164,7 +168,7 @@ def create_clients(train_dataset, config):
             shuffle=True
         )
 
-        model = SimpleCNN().to(config.DEVICE)
+        model = SimpleCNN(num_classes=config.NUM_CLASSES).to(config.DEVICE)
         clients.append(Client(model, loader, config))
 
     return clients
@@ -251,7 +255,7 @@ def main():
     train_dataset, test_dataset, proxy_dataset = load_data(config)
     clients = create_clients(train_dataset, config)
 
-    global_model = SimpleCNN().to(config.DEVICE)
+    global_model = SimpleCNN(num_classes=config.NUM_CLASSES).to(config.DEVICE)
     server = Server(global_model)
 
     log_path = f"noise_{int(config.NOISE_RATE*100)}.csv"
