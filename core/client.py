@@ -18,9 +18,9 @@ class Client:
         if global_model is not None:
             global_model.eval()
 
-        optimizer = optim.SGD(
+        optimizer = optim.Adam(
             self.model.parameters(),
-            lr=self.config.LR
+            lr=0.001
         )
 
         for _ in range(self.config.LOCAL_EPOCHS):
@@ -135,5 +135,8 @@ class Client:
 
                 loss.backward()
                 optimizer.step()
+
+        return self.model.state_dict()
+
 
         return self.model.state_dict()
