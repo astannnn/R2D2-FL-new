@@ -300,6 +300,7 @@ def evaluate_per_client(server_model, clients, config):
 def main():
 
     config = Config()
+    print("DATASET =", config.DATASET)
     set_seed(config.SEED)
 
     # Determine input channels
@@ -323,6 +324,7 @@ def main():
     print("==============")
 
     train_dataset, test_dataset, proxy_dataset = load_data(config)
+    print("Train size after load_data:", len(train_dataset))
     clients = create_clients(train_dataset, config, in_channels)
 
     global_model = SimpleCNN(
