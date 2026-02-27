@@ -97,47 +97,56 @@ def load_data(config):
 
     if getattr(config, "DATASET", "cifar10") == "emnist":
 
+        # =========================
+        # EMNIST FIX (rotation + flip)
+        # =========================
+        def emnist_fix(x):
+            x = torch.rot90(x, 1, [1, 2])
+            x = torch.flip(x, [2])
+            return x
+
         transform = transforms.Compose([
             transforms.ToTensor(),
+            transforms.Lambda(emnist_fix),
             transforms.Normalize((0.5,), (0.5,))
         ])
 
-        # ===== Train =====
+        # =========================
+        # Train dataset
+        # =========================
         full_train = datasets.EMNIST(
             root="./data",
-            split="byclass",
+            split=config.EMNIST_SPLIT,
             train=True,
             download=True,
             transform=transform
         )
 
-        # 🔥 Берём subset 80k
-        from torch.utils.data import Subset
-        import numpy as np
-
-        subset_size = 80000
+        # 🔥 deterministic subset (для воспроизводимости)
+        np.random.seed(config.SEED)
+        subset_size = min(80000, len(full_train))
         indices = np.random.choice(len(full_train), subset_size, replace=False)
+
         train_dataset = Subset(full_train, indices)
 
-        # ===== Test (НЕ трогаем) =====
+        # =========================
+        # Test dataset
+        # =========================
         test_dataset = datasets.EMNIST(
             root="./data",
-            split="byclass",
+            split=config.EMNIST_SPLIT,
             train=False,
             download=True,
             transform=transform
         )
 
-        # ===== Proxy =====
-        proxy_base = datasets.EMNIST(
-            root="./data",
-            split="byclass",
-            train=True,
-            download=True,
-            transform=transform
-        )
+        # =========================
+        # Proxy dataset (из train)
+        # =========================
+        proxy_base = full_train
 
     else:
+
         transform = transforms.ToTensor()
 
         train_dataset = datasets.CIFAR10(
@@ -154,16 +163,16 @@ def load_data(config):
             transform=transform
         )
 
-        proxy_base = datasets.CIFAR10(
-            root="./data",
-            train=True,
-            download=True,
-            transform=transform
-        )
+        proxy_base = train_dataset
 
+    # =========================
+    # Proxy subset
+    # =========================
     proxy_indices = list(range(config.PROXY_SIZE))
     proxy_dataset = Subset(proxy_base, proxy_indices)
-    print("DEBUG inside load_data, train size:", len(train_dataset))
+
+    print("Train size after load_data:", len(train_dataset))
+    print("Proxy size:", len(proxy_dataset))
 
     return train_dataset, test_dataset, proxy_dataset
 
