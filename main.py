@@ -94,43 +94,100 @@ def apply_noise(dataset, indices, config, client_id):
 # =========================
 
 def load_data(config):
+
     if getattr(config, "DATASET", "cifar10") == "emnist":
+
         transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,))
         ])
-        train_dataset = datasets.EMNIST(root="./data", split="byclass",
-                                        train=True, download=True, transform=transform)
-        test_dataset  = datasets.EMNIST(root="./data", split="byclass",
-                                        train=False, download=True, transform=transform)
 
-        proxy_base = datasets.EMNIST(root="./data", split="byclass",
-                                     train=True, download=True, transform=transform)
+        # ===== Train =====
+        full_train = datasets.EMNIST(
+            root="./data",
+            split="byclass",
+            train=True,
+            download=True,
+            transform=transform
+        )
+
+        # 🔥 Берём subset 80k
+        from torch.utils.data import Subset
+        import numpy as np
+
+        subset_size = 80000
+        indices = np.random.choice(len(full_train), subset_size, replace=False)
+        train_dataset = Subset(full_train, indices)
+
+        # ===== Test (НЕ трогаем) =====
+        test_dataset = datasets.EMNIST(
+            root="./data",
+            split="byclass",
+            train=False,
+            download=True,
+            transform=transform
+        )
+
+        # ===== Proxy =====
+        proxy_base = datasets.EMNIST(
+            root="./data",
+            split="byclass",
+            train=True,
+            download=True,
+            transform=transform
+        )
+
     else:
         transform = transforms.ToTensor()
-        train_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
-        test_dataset  = datasets.CIFAR10(root="./data", train=False, download=True, transform=transform)
-        proxy_base    = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
+
+        train_dataset = datasets.CIFAR10(
+            root="./data",
+            train=True,
+            download=True,
+            transform=transform
+        )
+
+        test_dataset = datasets.CIFAR10(
+            root="./data",
+            train=False,
+            download=True,
+            transform=transform
+        )
+
+        proxy_base = datasets.CIFAR10(
+            root="./data",
+            train=True,
+            download=True,
+            transform=transform
+        )
 
     proxy_indices = list(range(config.PROXY_SIZE))
     proxy_dataset = Subset(proxy_base, proxy_indices)
-    return train_dataset, test_dataset, proxy_dataset
+    print("DEBUG inside load_data, train size:", len(train_dataset))
 
+    return train_dataset, test_dataset, proxy_dataset
 
 # =========================
 # Clients
 # =========================
 
+from torch.utils.data import Subset, DataLoader
+import numpy as np
+import torch
+
 def create_clients(train_dataset, config, in_channels):
 
-    targets = getattr(train_dataset, "targets", None)
-    if targets is None:
-        targets = getattr(train_dataset, "labels", None)
-
-    if not isinstance(targets, torch.Tensor):
-        labels = torch.tensor(targets)
+    # base dataset + mapping (если train_dataset уже Subset)
+    if isinstance(train_dataset, Subset):
+        base_ds = train_dataset.dataset                 # EMNIST
+        base_idxs = np.array(train_dataset.indices)     # индексы subset внутри EMNIST
+        targets = np.array(base_ds.targets)[base_idxs]  # метки subset
     else:
-        labels = targets
+        base_ds = train_dataset
+        base_idxs = None
+        targets = np.array(getattr(train_dataset, "targets", getattr(train_dataset, "labels", None)))
+
+    labels = torch.tensor(targets)
 
     client_indices = dirichlet_partition(
         labels.numpy(),
@@ -140,9 +197,7 @@ def create_clients(train_dataset, config, in_channels):
 
     clients = []
 
-    num_noisy_clients = int(
-        config.NOISE_CLIENT_RATIO * config.NUM_CLIENTS
-    )
+    num_noisy_clients = int(config.NOISE_CLIENT_RATIO * config.NUM_CLIENTS)
 
     print(f"Injecting noise to {num_noisy_clients}/{config.NUM_CLIENTS} clients")
     print(f"Noise type: {config.NOISE_TYPE}")
@@ -150,15 +205,23 @@ def create_clients(train_dataset, config, in_channels):
 
     for i in range(config.NUM_CLIENTS):
 
-        indices = client_indices[i]
+        idx_local = np.array(client_indices[i])  # индексы внутри текущего train_dataset (subset space)
 
+        # Переводим в индексы base dataset (EMNIST), если train_dataset = Subset
+        if base_idxs is not None:
+            idx_base = base_idxs[idx_local]
+        else:
+            idx_base = idx_local
+
+        # 1) шум применяем к base_ds по base-индексам
         if i < num_noisy_clients and config.NOISE_RATE > 0:
-            apply_noise(train_dataset, indices, config, i)
+            apply_noise(base_ds, idx_base, config, i)
 
-        subset = Subset(train_dataset, indices)
+        # 2) строим loader: если subset, то берём Subset(base_ds, idx_base)
+        subset_ds = Subset(base_ds, idx_base.tolist())
 
         loader = DataLoader(
-            subset,
+            subset_ds,
             batch_size=config.BATCH_SIZE,
             shuffle=True
         )
@@ -167,6 +230,7 @@ def create_clients(train_dataset, config, in_channels):
             num_classes=config.NUM_CLASSES,
             in_channels=in_channels
         ).to(config.DEVICE)
+
         clients.append(Client(model, loader, config))
 
     return clients
