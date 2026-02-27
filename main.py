@@ -94,38 +94,26 @@ def apply_noise(dataset, indices, config, client_id):
 # =========================
 
 def load_data(config):
+    if getattr(config, "DATASET", "cifar10") == "emnist":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ])
+        train_dataset = datasets.EMNIST(root="./data", split="byclass",
+                                        train=True, download=True, transform=transform)
+        test_dataset  = datasets.EMNIST(root="./data", split="byclass",
+                                        train=False, download=True, transform=transform)
 
-    transform = transforms.ToTensor()
-
-    if config.DATASET == "cifar10":
-
-        train_dataset = datasets.CIFAR10(
-            root="./data",
-            train=True,
-            download=True,
-            transform=transform
-        )
-
-        test_dataset = datasets.CIFAR10(
-            root="./data",
-            train=False,
-            download=True,
-            transform=transform
-        )
-
-        proxy_base = datasets.CIFAR10(
-            root="./data",
-            train=True,
-            download=True,
-            transform=transform
-        )
-
+        proxy_base = datasets.EMNIST(root="./data", split="byclass",
+                                     train=True, download=True, transform=transform)
     else:
-        raise NotImplementedError("FEMNIST not yet implemented")
+        transform = transforms.ToTensor()
+        train_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
+        test_dataset  = datasets.CIFAR10(root="./data", train=False, download=True, transform=transform)
+        proxy_base    = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
 
     proxy_indices = list(range(config.PROXY_SIZE))
     proxy_dataset = Subset(proxy_base, proxy_indices)
-
     return train_dataset, test_dataset, proxy_dataset
 
 
@@ -135,7 +123,14 @@ def load_data(config):
 
 def create_clients(train_dataset, config, in_channels):
 
-    labels = torch.tensor(train_dataset.targets)
+    targets = getattr(train_dataset, "targets", None)
+    if targets is None:
+        targets = getattr(train_dataset, "labels", None)
+
+    if not isinstance(targets, torch.Tensor):
+        labels = torch.tensor(targets)
+    else:
+        labels = targets
 
     client_indices = dirichlet_partition(
         labels.numpy(),
@@ -246,7 +241,7 @@ def main():
     # Determine input channels
     if config.DATASET == "cifar10":
         in_channels = 3
-    elif config.DATASET == "femnist":
+    elif config.DATASET in ["emnist", "femnist"]:
         in_channels = 1
     else:
         raise ValueError("Unknown dataset")
