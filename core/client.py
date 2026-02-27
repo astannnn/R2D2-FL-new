@@ -18,7 +18,7 @@ class Client:
         if global_model is not None:
             global_model.eval()
 
-        optimizer = optim.SGD(
+        optimizer = optim.Adam(
             self.model.parameters(),
             lr=self.config.LR
         )
