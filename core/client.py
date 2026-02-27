@@ -18,9 +18,9 @@ class Client:
         if global_model is not None:
             global_model.eval()
 
-        optimizer = optim.Adam(
+        optimizer = optim.SGD(
             self.model.parameters(),
-            lr=0.001
+            lr=self.config.LR
         )
 
         for _ in range(self.config.LOCAL_EPOCHS):
@@ -73,8 +73,7 @@ class Client:
                         conf, _ = torch.max(probs, dim=1)
 
                         mask = conf > self.config.CONF_THRESHOLD
-                        y_onehot = F.one_hot(y, num_classes=10).float()
-
+                        y_onehot = F.one_hot(y, num_classes=self.config.NUM_CLASSES).float()
                         # ---------- Hard samples ----------
                         if mask.sum() > 0:
                             hard_loss = F.cross_entropy(
@@ -135,8 +134,5 @@ class Client:
 
                 loss.backward()
                 optimizer.step()
-
-        return self.model.state_dict()
-
 
         return self.model.state_dict()
