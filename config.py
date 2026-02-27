@@ -14,11 +14,11 @@ class Config:
     # =====================================================
     # FL setup
     # =====================================================
-    NUM_CLIENTS = 8
+    NUM_CLIENTS = 1
     CLIENT_FRACTION = 0.75
     LOCAL_EPOCHS = 2
     BATCH_SIZE = 128
-    ROUNDS = 30
+    ROUNDS = 5
     LR = 0.001
     DIRICHLET_ALPHA = 0.3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -53,14 +53,14 @@ class Config:
     # =====================================================
     # Reliability
     # =====================================================
-    USE_RELIABILITY = True
-    USE_CLASS_RELIABILITY = True
+    USE_RELIABILITY = False
+    USE_CLASS_RELIABILITY = False
 
     # =====================================================
     # Ablation switches
     # =====================================================
-    USE_SOFT_CORRECTION = True
-    USE_LOCAL_KD = True
+    USE_SOFT_CORRECTION = False
+    USE_LOCAL_KD = False
 
     # =====================================================
     # FedProx (optional baseline)
