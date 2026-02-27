@@ -6,14 +6,9 @@ class Config:
     # =====================================================
     # DATASET
     # =====================================================
-    DATASET = "cifar10"     # cifar10 / femnist
-    NUM_CLASSES = 10        # 10 for CIFAR, 62 for FEMNIST
-
-    # =====================================================
-    # FedProx
-    # =====================================================
-    USE_FEDPROX = False
-    MU = 0.01
+    DATASET = "emnist"      # "cifar10" / "emnist"
+    NUM_CLASSES = 62        # 10 for CIFAR, 62 for EMNIST
+    IN_CHANNELS = 1         # 3 for CIFAR, 1 for EMNIST
 
     # =====================================================
     # FL setup
@@ -32,7 +27,7 @@ class Config:
     # =====================================================
     NOISE_CLIENT_RATIO = 0.5
     NOISE_RATE = 0.4
-    NOISE_TYPE = "symmetric"   # none / symmetric / asymmetric / heterogeneous
+    NOISE_TYPE = "symmetric"   # "symmetric" / "heterogeneous"
 
     # =====================================================
     # Proxy
@@ -67,8 +62,7 @@ class Config:
     USE_LOCAL_KD = True
 
     # =====================================================
-    # FEMNIST settings
+    # FedProx (optional baseline)
     # =====================================================
-    FEMNIST_NUM_CLASSES = 62
-    FEMNIST_NUM_CLIENTS = 100
-    FEMNIST_WRITER_SPLIT = True
+    USE_FEDPROX = False
+    MU = 0.01
