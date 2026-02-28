@@ -14,7 +14,7 @@ class Config:
     # =====================================================
     # FL setup
     # =====================================================
-    NUM_CLIENTS = 10
+    NUM_CLIENTS = 15
     CLIENT_FRACTION = 0.5
     LOCAL_EPOCHS = 1
     BATCH_SIZE = 8
