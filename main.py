@@ -12,7 +12,7 @@ from core.models import SimpleCNN
 from core.partition import dirichlet_partition
 from core.client import Client
 from core.server import Server
-from data.aptos_loader import load_aptos
+
 
 
 # =========================
@@ -46,6 +46,10 @@ def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
 
 
 def inject_asymmetric_noise(dataset, indices, noise_rate):
+    """
+    CIFAR-10 specific mapping.
+    Keep it for cifar10; DO NOT use for aptos/emnist.
+    """
     targets = np.array(dataset.targets)
 
     mapping = {
@@ -72,9 +76,14 @@ def inject_asymmetric_noise(dataset, indices, noise_rate):
 
 
 def apply_noise(dataset, indices, config, client_id):
+    # NEW/CHANGED: forbid asymmetric noise for non-cifar datasets
+    if config.NOISE_TYPE == "asymmetric" and config.DATASET != "cifar10":
+        raise ValueError("Asymmetric noise mapping is implemented only for CIFAR-10. "
+                         "Set NOISE_TYPE='symmetric' or 'heterogeneous' for this dataset.")
 
     if config.NOISE_TYPE == "symmetric":
         inject_symmetric_noise(dataset, indices, config.NOISE_RATE, config.NUM_CLASSES)
+
     elif config.NOISE_TYPE == "asymmetric":
         inject_asymmetric_noise(dataset, indices, config.NOISE_RATE)
 
@@ -140,11 +149,8 @@ def load_data(config):
     # APTOS (Medical)
     # =========================
     elif config.DATASET == "aptos":
-
         from data.aptos_loader import load_aptos_raw
-
         train_dataset, test_dataset = load_aptos_raw(config)
-
         proxy_base = train_dataset
 
     # =========================
@@ -189,6 +195,7 @@ def load_data(config):
 
     return train_dataset, test_dataset, proxy_dataset
 
+
 # =========================
 # Clients
 # =========================
@@ -197,13 +204,15 @@ from torch.utils.data import Subset, DataLoader
 import numpy as np
 import torch
 
-def create_clients(train_dataset, config, in_channels):
+
+# NEW/CHANGED: create_clients takes model_factory instead of in_channels
+def create_clients(train_dataset, config, model_factory):
 
     # base dataset + mapping (если train_dataset уже Subset)
     if isinstance(train_dataset, Subset):
-        base_ds = train_dataset.dataset                 # EMNIST
-        base_idxs = np.array(train_dataset.indices)     # индексы subset внутри EMNIST
-        targets = np.array(base_ds.targets)[base_idxs]  # метки subset
+        base_ds = train_dataset.dataset
+        base_idxs = np.array(train_dataset.indices)
+        targets = np.array(base_ds.targets)[base_idxs]
     else:
         base_ds = train_dataset
         base_idxs = None
@@ -227,19 +236,17 @@ def create_clients(train_dataset, config, in_channels):
 
     for i in range(config.NUM_CLIENTS):
 
-        idx_local = np.array(client_indices[i])  # индексы внутри текущего train_dataset (subset space)
+        idx_local = np.array(client_indices[i])  # indices in train_dataset space
 
-        # Переводим в индексы base dataset (EMNIST), если train_dataset = Subset
         if base_idxs is not None:
             idx_base = base_idxs[idx_local]
         else:
             idx_base = idx_local
 
-        # 1) шум применяем к base_ds по base-индексам
+        # noise applied to base dataset
         if i < num_noisy_clients and config.NOISE_RATE > 0:
             apply_noise(base_ds, idx_base, config, i)
 
-        # 2) строим loader: если subset, то берём Subset(base_ds, idx_base)
         subset_ds = Subset(base_ds, idx_base.tolist())
 
         loader = DataLoader(
@@ -248,11 +255,8 @@ def create_clients(train_dataset, config, in_channels):
             shuffle=True
         )
 
-        model = SimpleCNN(
-            num_classes=config.NUM_CLASSES,
-            in_channels=in_channels
-        ).to(config.DEVICE)
-
+        # NEW/CHANGED: model from factory (so aptos clients use ResNet too)
+        model = model_factory()
         clients.append(Client(model, loader, config))
 
     return clients
@@ -337,6 +341,22 @@ def main():
     else:
         raise ValueError("Unknown dataset")
 
+    # =========================
+    # NEW/CHANGED: single model factory used by BOTH clients and server
+    # =========================
+    def make_model():
+        if config.DATASET == "aptos":
+            import torchvision.models as models
+            import torch.nn as nn
+            m = models.resnet18(weights="IMAGENET1K_V1")
+            m.fc = nn.Linear(m.fc.in_features, config.NUM_CLASSES)
+            return m.to(config.DEVICE)
+        else:
+            return SimpleCNN(
+                num_classes=config.NUM_CLASSES,
+                in_channels=in_channels
+            ).to(config.DEVICE)
+
     print("=== CONFIG ===")
     print(f"DEVICE={config.DEVICE}")
     print(f"NUM_CLIENTS={config.NUM_CLIENTS}")
@@ -354,25 +374,11 @@ def main():
     train_dataset, test_dataset, proxy_dataset = load_data(config)
     print("Train size after load_data:", len(train_dataset))
 
-    clients = create_clients(train_dataset, config, in_channels)
+    # NEW/CHANGED: pass make_model to clients
+    clients = create_clients(train_dataset, config, make_model)
 
-    # =========================
-    # Model selection
-    # =========================
-    if config.DATASET == "aptos":
-        import torchvision.models as models
-        import torch.nn as nn
-
-        global_model = models.resnet18(weights="IMAGENET1K_V1")
-        global_model.fc = nn.Linear(global_model.fc.in_features, config.NUM_CLASSES)
-        global_model = global_model.to(config.DEVICE)
-
-    else:
-        global_model = SimpleCNN(
-            num_classes=config.NUM_CLASSES,
-            in_channels=in_channels
-        ).to(config.DEVICE)
-
+    # NEW/CHANGED: server model from same factory
+    global_model = make_model()
     server = Server(global_model)
 
     log_path = f"{config.DATASET}_noise_{int(config.NOISE_RATE*100)}.csv"
