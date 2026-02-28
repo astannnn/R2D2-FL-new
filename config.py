@@ -6,20 +6,20 @@ class Config:
     # =====================================================
     # DATASET
     # =====================================================
-    DATASET = "emnist"
+    DATASET = "aptos"
     EMNIST_SPLIT = "balanced"   # "balanced" (47 classes) или "byclass" (62)
-    NUM_CLASSES = 47            # 47 для balanced
-    IN_CHANNELS = 1             # EMNIST grayscale
+    NUM_CLASSES = 5            # 47 для balanced
+    IN_CHANNELS = 3             # EMNIST grayscale
 
     # =====================================================
     # FL setup
     # =====================================================
-    NUM_CLIENTS = 1
-    CLIENT_FRACTION = 0.75
-    LOCAL_EPOCHS = 2
-    BATCH_SIZE = 128
+    NUM_CLIENTS = 10
+    CLIENT_FRACTION = 0.5
+    LOCAL_EPOCHS = 1
+    BATCH_SIZE = 8
     ROUNDS = 5
-    LR = 0.001
+    LR = 0.0001
     DIRICHLET_ALPHA = 0.3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
