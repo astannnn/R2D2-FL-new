@@ -12,6 +12,7 @@ from core.models import SimpleCNN
 from core.partition import dirichlet_partition
 from core.client import Client
 from core.server import Server
+from data.aptos_loader import load_aptos
 
 
 # =========================
@@ -95,11 +96,11 @@ def apply_noise(dataset, indices, config, client_id):
 
 def load_data(config):
 
-    if getattr(config, "DATASET", "cifar10") == "emnist":
+    # =========================
+    # EMNIST
+    # =========================
+    if config.DATASET == "emnist":
 
-        # =========================
-        # EMNIST FIX (rotation + flip)
-        # =========================
         def emnist_fix(x):
             x = torch.rot90(x, 1, [1, 2])
             x = torch.flip(x, [2])
@@ -111,9 +112,6 @@ def load_data(config):
             transforms.Normalize((0.5,), (0.5,))
         ])
 
-        # =========================
-        # Train dataset
-        # =========================
         full_train = datasets.EMNIST(
             root="./data",
             split=config.EMNIST_SPLIT,
@@ -122,16 +120,12 @@ def load_data(config):
             transform=transform
         )
 
-        # 🔥 deterministic subset (для воспроизводимости)
         np.random.seed(config.SEED)
         subset_size = min(80000, len(full_train))
         indices = np.random.choice(len(full_train), subset_size, replace=False)
 
         train_dataset = Subset(full_train, indices)
 
-        # =========================
-        # Test dataset
-        # =========================
         test_dataset = datasets.EMNIST(
             root="./data",
             split=config.EMNIST_SPLIT,
@@ -140,12 +134,23 @@ def load_data(config):
             transform=transform
         )
 
-        # =========================
-        # Proxy dataset (из train)
-        # =========================
         proxy_base = full_train
 
-    else:
+    # =========================
+    # APTOS (Medical)
+    # =========================
+    elif config.DATASET == "aptos":
+
+        from data.aptos_loader import load_aptos_raw
+
+        train_dataset, test_dataset = load_aptos_raw(config)
+
+        proxy_base = train_dataset
+
+    # =========================
+    # CIFAR10
+    # =========================
+    elif config.DATASET == "cifar10":
 
         transform = transforms.ToTensor()
 
@@ -165,14 +170,22 @@ def load_data(config):
 
         proxy_base = train_dataset
 
-    # =========================
-    # Proxy subset
-    # =========================
-    proxy_indices = list(range(config.PROXY_SIZE))
-    proxy_dataset = Subset(proxy_base, proxy_indices)
+    else:
+        raise ValueError(f"Unknown dataset: {config.DATASET}")
 
-    print("Train size after load_data:", len(train_dataset))
-    print("Proxy size:", len(proxy_dataset))
+    # =========================
+    # Proxy dataset creation
+    # =========================
+    proxy_dataset = None
+
+    if getattr(config, "PROXY_SIZE", 0) > 0:
+        proxy_size = min(config.PROXY_SIZE, len(proxy_base))
+        proxy_indices = np.random.choice(
+            len(proxy_base),
+            proxy_size,
+            replace=False
+        )
+        proxy_dataset = Subset(proxy_base, proxy_indices)
 
     return train_dataset, test_dataset, proxy_dataset
 
@@ -312,11 +325,15 @@ def main():
     print("DATASET =", config.DATASET)
     set_seed(config.SEED)
 
-    # Determine input channels
+    # =========================
+    # Input channels
+    # =========================
     if config.DATASET == "cifar10":
         in_channels = 3
     elif config.DATASET in ["emnist", "femnist"]:
         in_channels = 1
+    elif config.DATASET == "aptos":
+        in_channels = 3
     else:
         raise ValueError("Unknown dataset")
 
@@ -327,34 +344,52 @@ def main():
     print(f"LOCAL_EPOCHS={config.LOCAL_EPOCHS}")
     print(f"ROUNDS={config.ROUNDS}")
     print(f"DIRICHLET_ALPHA={config.DIRICHLET_ALPHA}")
-    print(f"NOISE_CLIENT_RATIO={config.NOISE_CLIENT_RATIO}")
     print(f"NOISE_RATE={config.NOISE_RATE}")
     print(f"NOISE_TYPE={config.NOISE_TYPE}")
     print("==============")
 
+    # =========================
+    # Load data
+    # =========================
     train_dataset, test_dataset, proxy_dataset = load_data(config)
     print("Train size after load_data:", len(train_dataset))
+
     clients = create_clients(train_dataset, config, in_channels)
 
-    global_model = SimpleCNN(
-        num_classes=config.NUM_CLASSES,
-        in_channels=in_channels
-    ).to(config.DEVICE)
+    # =========================
+    # Model selection
+    # =========================
+    if config.DATASET == "aptos":
+        import torchvision.models as models
+        import torch.nn as nn
+
+        global_model = models.resnet18(weights="IMAGENET1K_V1")
+        global_model.fc = nn.Linear(global_model.fc.in_features, config.NUM_CLASSES)
+        global_model = global_model.to(config.DEVICE)
+
+    else:
+        global_model = SimpleCNN(
+            num_classes=config.NUM_CLASSES,
+            in_channels=in_channels
+        ).to(config.DEVICE)
+
     server = Server(global_model)
 
-    log_path = f"noise_{int(config.NOISE_RATE*100)}.csv"
+    log_path = f"{config.DATASET}_noise_{int(config.NOISE_RATE*100)}.csv"
 
+    # =========================
+    # Training loop
+    # =========================
     with open(log_path, "w", newline="", encoding="utf-8") as f:
+
         writer = csv.writer(f)
-        writer.writerow(
-            [
-                "round",
-                "global_accuracy",
-                "worst_client_accuracy",
-                "round_time_sec",
-                "num_selected_clients"
-            ]
-        )
+        writer.writerow([
+            "round",
+            "global_accuracy",
+            "worst_client_accuracy",
+            "round_time_sec",
+            "num_selected_clients"
+        ])
 
         print("Starting training...")
 
@@ -380,7 +415,7 @@ def main():
 
             server.aggregate(client_weights, client_sizes)
 
-            if config.USE_R2D2:
+            if config.USE_R2D2 and proxy_dataset is not None:
                 server.distill(
                     [client.model for client in selected_clients],
                     proxy_dataset,
@@ -409,15 +444,13 @@ def main():
                 f"clients={m}"
             )
 
-            writer.writerow(
-                [
-                    r + 1,
-                    f"{global_acc:.6f}",
-                    f"{worst_acc:.6f}",
-                    f"{dt:.3f}",
-                    m
-                ]
-            )
+            writer.writerow([
+                r + 1,
+                f"{global_acc:.6f}",
+                f"{worst_acc:.6f}",
+                f"{dt:.3f}",
+                m
+            ])
 
     print(f"Done. Log saved to: {log_path}")
 
