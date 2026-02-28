@@ -1,1 +1,61 @@
- 
+  # data/aptos_loader.py
+
+from torchvision.datasets import ImageFolder
+from torchvision import transforms
+from torch.utils.data import random_split
+
+
+def load_aptos_raw(config):
+
+    # =========================
+    # Transforms
+    # =========================
+    train_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],   # ImageNet
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+    test_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+    # =========================
+    # Load dataset
+    # =========================
+    full_dataset = ImageFolder(
+        root="data/aptos/train",
+        transform=train_transform
+    )
+
+    # 80/20 split
+    train_size = int(0.8 * len(full_dataset))
+    test_size = len(full_dataset) - train_size
+
+    train_dataset, test_dataset = random_split(
+        full_dataset,
+        [train_size, test_size]
+    )
+
+    # IMPORTANT:
+    # random_split removes .targets attribute
+    # We need to restore it for Dirichlet + noise
+
+    train_dataset.targets = [
+        full_dataset.targets[i] for i in train_dataset.indices
+    ]
+
+    test_dataset.targets = [
+        full_dataset.targets[i] for i in test_dataset.indices
+    ]
+
+    return train_dataset, test_dataset
