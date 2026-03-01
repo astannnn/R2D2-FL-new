@@ -7,12 +7,13 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 
+from sklearn.metrics import f1_score  # NEW
+
 from config import Config
 from core.models import SimpleCNN
 from core.partition import dirichlet_partition
 from core.client import Client
 from core.server import Server
-
 
 
 # =========================
@@ -76,10 +77,12 @@ def inject_asymmetric_noise(dataset, indices, noise_rate):
 
 
 def apply_noise(dataset, indices, config, client_id):
-    # NEW/CHANGED: forbid asymmetric noise for non-cifar datasets
+    # forbid asymmetric noise for non-cifar datasets
     if config.NOISE_TYPE == "asymmetric" and config.DATASET != "cifar10":
-        raise ValueError("Asymmetric noise mapping is implemented only for CIFAR-10. "
-                         "Set NOISE_TYPE='symmetric' or 'heterogeneous' for this dataset.")
+        raise ValueError(
+            "Asymmetric noise mapping is implemented only for CIFAR-10. "
+            "Set NOISE_TYPE='symmetric' or 'heterogeneous' for this dataset."
+        )
 
     if config.NOISE_TYPE == "symmetric":
         inject_symmetric_noise(dataset, indices, config.NOISE_RATE, config.NUM_CLASSES)
@@ -205,7 +208,6 @@ import numpy as np
 import torch
 
 
-# NEW/CHANGED: create_clients takes model_factory instead of in_channels
 def create_clients(train_dataset, config, model_factory):
 
     # base dataset + mapping (если train_dataset уже Subset)
@@ -255,7 +257,6 @@ def create_clients(train_dataset, config, model_factory):
             shuffle=True
         )
 
-        # NEW/CHANGED: model from factory (so aptos clients use ResNet too)
         model = model_factory()
         clients.append(Client(model, loader, config))
 
@@ -267,12 +268,18 @@ def create_clients(train_dataset, config, model_factory):
 # =========================
 
 def evaluate_global(model, test_dataset, config):
-
+    """
+    Returns:
+        (accuracy, macro_f1)
+    """
     loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
 
     model.eval()
     correct = 0
     total = 0
+
+    all_preds = []
+    all_targets = []
 
     with torch.no_grad():
         for x, y in loader:
@@ -285,7 +292,13 @@ def evaluate_global(model, test_dataset, config):
             total += y.size(0)
             correct += (predicted == y).sum().item()
 
-    return correct / total
+            all_preds.extend(predicted.detach().cpu().numpy())
+            all_targets.extend(y.detach().cpu().numpy())
+
+    acc = correct / total if total > 0 else 0.0
+    macro_f1 = f1_score(all_targets, all_preds, average="macro")
+
+    return acc, macro_f1
 
 
 def evaluate_per_client(server_model, clients, config):
@@ -314,8 +327,7 @@ def evaluate_per_client(server_model, clients, config):
             acc = correct / total if total > 0 else 0.0
             client_accuracies.append(acc)
 
-    worst_acc = min(client_accuracies)
-
+    worst_acc = min(client_accuracies) if len(client_accuracies) > 0 else 0.0
     return worst_acc
 
 
@@ -342,7 +354,7 @@ def main():
         raise ValueError("Unknown dataset")
 
     # =========================
-    # NEW/CHANGED: single model factory used by BOTH clients and server
+    # Single model factory used by BOTH clients and server
     # =========================
     def make_model():
         if config.DATASET == "aptos":
@@ -374,10 +386,8 @@ def main():
     train_dataset, test_dataset, proxy_dataset = load_data(config)
     print("Train size after load_data:", len(train_dataset))
 
-    # NEW/CHANGED: pass make_model to clients
     clients = create_clients(train_dataset, config, make_model)
 
-    # NEW/CHANGED: server model from same factory
     global_model = make_model()
     server = Server(global_model)
 
@@ -392,6 +402,7 @@ def main():
         writer.writerow([
             "round",
             "global_accuracy",
+            "macro_f1",                 # NEW
             "worst_client_accuracy",
             "round_time_sec",
             "num_selected_clients"
@@ -428,7 +439,7 @@ def main():
                     config
                 )
 
-            global_acc = evaluate_global(
+            global_acc, macro_f1_val = evaluate_global(
                 server.global_model,
                 test_dataset,
                 config
@@ -445,6 +456,7 @@ def main():
             print(
                 f"Round {r+1:03d} | "
                 f"Global={global_acc:.4f} | "
+                f"MacroF1={macro_f1_val:.4f} | "
                 f"Worst={worst_acc:.4f} | "
                 f"time={dt:.1f}s | "
                 f"clients={m}"
@@ -453,6 +465,7 @@ def main():
             writer.writerow([
                 r + 1,
                 f"{global_acc:.6f}",
+                f"{macro_f1_val:.6f}",     # NEW
                 f"{worst_acc:.6f}",
                 f"{dt:.3f}",
                 m
