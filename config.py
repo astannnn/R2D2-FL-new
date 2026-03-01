@@ -18,7 +18,7 @@ class Config:
     CLIENT_FRACTION = 0.5
     LOCAL_EPOCHS = 1
     BATCH_SIZE = 8
-    ROUNDS = 5
+    ROUNDS = 30
     LR = 0.0001
     DIRICHLET_ALPHA = 0.3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
