@@ -1,9 +1,10 @@
-Technical Report – R2D2-FL Implementation
+Technical Report
+R2D2-FL Implementation
 1. Introduction
 
-This project implements and experimentally evaluates R2D2-FL (Reliability-Weighted Robust Distillation for Federated Learning) under non-IID and noisy federated settings.
+This project presents the implementation and experimental evaluation of R2D2-FL (Reliability-Weighted Robust Distillation for Federated Learning) under non-IID and noisy federated environments.
 
-The objective is to assess whether reliability-aware aggregation and proxy-based knowledge distillation improve robustness compared to standard federated optimization methods.
+The objective is to evaluate whether reliability-aware aggregation and proxy-based knowledge distillation improve robustness compared to standard federated optimization methods.
 
 The project includes:
 
@@ -22,10 +23,7 @@ Structured ablation study
 All experiments were conducted under controlled and reproducible configurations.
 
 2. Baseline Methods
-
-Two baselines were implemented:
-
-FedAvg
+2.1 FedAvg
 
 Standard federated parameter averaging with:
 
@@ -33,17 +31,17 @@ Random client sampling
 
 Local SGD training
 
-Weighted aggregation by dataset size
+Weighted aggregation based on dataset size
 
-FedProx
+2.2 FedProx
 
-An extension of FedAvg with a proximal regularization term to reduce client drift under heterogeneous data distributions.
+An extension of FedAvg introducing a proximal regularization term to reduce client drift under heterogeneous data distributions.
 
-These baselines serve as reference methods for robustness comparison.
+Both baselines serve as reference methods for robustness comparison.
 
 3. Noise Modeling
 
-To simulate realistic federated learning conditions, multiple noise regimes were implemented:
+To simulate realistic federated conditions, multiple noise regimes were implemented:
 
 No noise (0%)
 
@@ -55,21 +53,21 @@ No noise (0%)
 
 Heterogeneous client-level corruption
 
-Noise was injected after Dirichlet-based data partitioning (α = 0.3) to simulate strong non-IID behavior.
+Noise is injected after Dirichlet-based data partitioning (α = 0.3).
 
-This design enables evaluation under:
+This enables simulation of:
 
 Uniform corruption
 
 Structured label corruption
 
-Client-dependent noise variability
+Client-level corruption variability
 
 4. R2D2-FL Architecture
 
-The implemented R2D2-FL framework extends standard federated learning with reliability-aware distillation.
+R2D2-FL extends standard federated learning with reliability-aware distillation.
 
-Client-Side Components
+4.1 Client-Side Components
 
 Confidence-based sample selection
 
@@ -77,7 +75,7 @@ Soft label correction
 
 Local knowledge distillation
 
-Server-Side Components
+4.2 Server-Side Components
 
 Client-level reliability estimation
 
@@ -87,7 +85,9 @@ Reliability-weighted ensemble teacher construction
 
 Proxy-based global distillation
 
-Each communication round consists of:
+4.3 Communication Round Procedure
+
+Each round consists of:
 
 Client sampling
 
@@ -135,21 +135,21 @@ k,c
 
  is computed
 
-These reliability scores are used to weight logits during ensemble teacher construction, reducing the influence of unreliable clients.
+These scores are used to weight logits during ensemble teacher construction.
 
 6. Proxy-Based Distillation
 
 A proxy dataset (size = 400 samples) is maintained at the server.
 
-The global model is updated by minimizing KL divergence between:
+The global model is updated by minimizing:
 
-Global model predictions
+KL divergence between global predictions
 
 Reliability-weighted ensemble teacher distribution
 
 Temperature scaling (τ = 2.0) and distillation weight (β = 0.1) are applied.
 
-This mechanism improves robustness by filtering noisy client contributions.
+This mechanism reduces the influence of unreliable clients.
 
 7. Experimental Evaluation
 
@@ -159,9 +159,9 @@ CIFAR-10
 
 EMNIST
 
-APTOS 2019 (medical dataset)
+APTOS 2019 (Medical Dataset)
 
-Metrics:
+Metrics
 
 Global test accuracy
 
@@ -169,32 +169,32 @@ Worst-client accuracy
 
 Macro-F1 (APTOS)
 
-Results show:
+Summary of Findings
 
 On CIFAR-10, R2D2-FL consistently improves worst-client robustness under symmetric corruption.
 
 On EMNIST, R2D2-FL improves clean performance but shows mixed behavior under extreme symmetric noise.
 
-On APTOS, FedAvg outperforms R2D2-FL, indicating dataset-dependent behavior under severe class imbalance.
+On APTOS, FedAvg outperforms R2D2-FL, indicating dataset-dependent robustness behavior.
 
 8. Ablation Study
 
-An ablation study was conducted on CIFAR-10 under 40% symmetric noise.
+Ablation experiments were conducted on CIFAR-10 under 40% symmetric noise.
 
-Findings:
+Key Observations
 
 Removing local KD slightly increases global accuracy but reduces worst-client stability.
 
-Removing soft correction significantly increases performance, suggesting sensitivity under severe symmetric noise.
+Removing soft label correction significantly increases performance, suggesting sensitivity under severe corruption.
 
-Removing reliability weighting produces moderate changes.
+Removing reliability weighting produces moderate performance variations.
 
-This demonstrates that different components contribute unequally depending on noise characteristics.
+This confirms that individual components contribute differently depending on noise characteristics.
 
 9. Final Conclusions
 
 The implementation confirms that reliability-weighted distillation improves robustness in balanced multi-class datasets under symmetric corruption.
 
-However, performance gains are dataset-dependent and may require further tuning in highly imbalanced medical scenarios.
+However, performance gains are dataset-dependent and require further tuning in highly imbalanced medical scenarios.
 
-The project provides a complete and reproducible implementation of R2D2-FL and establishes a structured benchmark for robustness evaluation in federated learning.
+This project provides a complete and reproducible implementation of R2D2-FL and establishes a structured robustness benchmark in federated learning.
