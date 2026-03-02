@@ -4,19 +4,20 @@
 
 ```
 .
-├── main.py # Main training script
-├── config.py # Hyperparameter configuration
+├── main.py                # Main training script
+├── config.py              # Hyperparameter configuration
 ├── README.md
 ├── technical_report.md
 │
-├── core/ # Core Federated Learning logic
-│ ├── init.py
-│ ├── client.py # Client-side local training (FedAvg, FedProx, R2D2)
-│ ├── server.py # Server aggregation and distillation logic
-│ ├── partition.py # Dirichlet data partitioning
-│ ├── models.py # Model architectures
+├── core/                  # Core Federated Learning logic
+│   ├── __init__.py
+│   ├── client.py          # Client-side local training (FedAvg, FedProx, R2D2)
+│   ├── server.py          # Server aggregation and distillation logic
+│   ├── partition.py       # Dirichlet data partitioning
+│   ├── models.py          # Model architectures
+│
 └── data/
-└── aptos_loader.py # APTOS medical dataset loader
+    └── aptos_loader.py    # APTOS medical dataset loader
 ```
 
 ---
@@ -36,15 +37,13 @@ pip install torch torchvision numpy tqdm matplotlib
 
 ## Supported Datasets
 
-CIFAR-10
-
+### CIFAR-10
 Automatically downloaded via torchvision.
 
-EMNIST (Digits split)
-
+### EMNIST (Digits split)
 Automatically downloaded via torchvision.
 
-APTOS 2019 (Medical Retinopathy Dataset)
+### APTOS 2019 (Medical Retinopathy Dataset)
 
 If the dataset is not found locally, a small synthetic fallback dataset is automatically generated to verify that the training pipeline runs correctly.
 
@@ -55,73 +54,61 @@ https://www.kaggle.com/competitions/aptos2019-blindness-detection
 
 Extract training images into:
 
+```
 data/aptos/train/
+```
 
-Folder structure must be:
+Folder structure:
 
+```
 data/aptos/train/
  ├── 0/
  ├── 1/
  ├── 2/
  ├── 3/
  └── 4/
+```
 
-Each folder should contain images belonging to that class.
+---
 
-Configuration
+## Configuration
 
-All hyperparameters are defined in config.py.
+All hyperparameters are defined in `config.py`.
 
-The configuration system includes:
+Configuration classes:
 
-BaseConfig – shared parameters
-
-CIFARConfig
-
-EMNISTConfig
-
-APTOSConfig
+- `BaseConfig`
+- `CIFARConfig`
+- `EMNISTConfig`
+- `APTOSConfig`
 
 Key parameters:
 
-NUM_CLIENTS
+- `NUM_CLIENTS`
+- `CLIENT_FRACTION`
+- `LOCAL_EPOCHS`
+- `ROUNDS`
+- `LR`
+- `DIRICHLET_ALPHA`
+- `NOISE_RATE`
+- `NOISE_TYPE`
+- `PROXY_SIZE`
+- `USE_R2D2`
+- `USE_FEDPROX`
+- `SEED`
 
-CLIENT_FRACTION
-
-LOCAL_EPOCHS
-
-ROUNDS
-
-LR
-
-DIRICHLET_ALPHA
-
-NOISE_RATE
-
-NOISE_TYPE
-
-PROXY_SIZE
-
-USE_R2D2
-
-USE_FEDPROX
-
-SEED
-
-To switch datasets, modify the dataset selection inside main.py.
+To switch datasets, modify the dataset selection inside `main.py`.
 
 ---
 
 ## Federated Data Simulation
 
-The framework supports realistic non-IID and noisy federated scenarios:
-
-- Dirichlet-based data partitioning (α configurable)
+- Dirichlet-based non-IID partitioning (α configurable)
 - Symmetric label noise
 - Asymmetric label noise
 - Heterogeneous client-level corruption
 
-Noise injection is performed after client data partitioning.
+Noise injection is applied after client partitioning.
 
 ---
 
@@ -134,59 +121,32 @@ Noise injection is performed after client data partitioning.
 
 ### Proposed Method
 
-**R2D2-FL**, including:
+**R2D2-FL**
 
-#### Client-side
-
+Client-side:
 - Confidence-based sample selection
 - Soft label correction
 - Local knowledge distillation
 
-#### Server-side
-
+Server-side:
 - Client-level reliability estimation
 - Class-level reliability weighting
-- Reliability-weighted ensemble teacher construction
+- Reliability-weighted ensemble teacher
 - Proxy-based global distillation
-
----
-
-## Configuration
-
-All hyperparameters are defined in `config.py`.
-
-Key parameters include:
-
-- `NUM_CLIENTS`
-- `CLIENT_FRACTION`
-- `LOCAL_EPOCHS`
-- `ROUNDS`
-- `LR`
-- `DIRICHLET_ALPHA`
-- `NOISE_RATE`
-- `NOISE_TYPE`
-- `PROXY_SIZE`
-- `SEED`
-- `USE_R2D2`
-- `USE_FEDPROX`
-
-Modify `config.py` before running experiments.
 
 ---
 
 ## Running Experiments
 
-To start training:
-
 ```bash
 python main.py
 ```
 
-Experiment type is controlled via:
+Control method via:
 
 ```python
-USE_R2D2 = True / False
-USE_FEDPROX = True / False
+USE_R2D2 = True  # or False
+USE_FEDPROX = True  # or False
 ```
 
 ---
@@ -195,9 +155,10 @@ USE_FEDPROX = True / False
 
 - Global test accuracy
 - Worst-client accuracy
-- Macro-F1 score (APTOS)
+- Macro-F1 (APTOS)
+- Convergence curves
 
-Results are averaged across multiple seeds for statistical stability.
+Results are averaged across multiple seeds.
 
 ---
 
@@ -206,7 +167,7 @@ Results are averaged across multiple seeds for statistical stability.
 - Fixed random seeds
 - Deterministic data partitioning
 - Fully configurable hyperparameters
-- Logging of training rounds
+- Round-wise logging
 
 ---
 
@@ -214,8 +175,8 @@ Results are averaged across multiple seeds for statistical stability.
 
 R2D2-FL introduces reliability-aware aggregation through proxy-based distillation.
 
-The implementation provides a structured benchmark for evaluating robustness under:
+The framework benchmarks robustness under:
 
-- Non-IID data distributions
-- Symmetric and asymmetric label corruption
-- Client-level corruption variability
+- Non-IID distributions
+- Symmetric and asymmetric label noise
+- Heterogeneous client corruption
