@@ -6,17 +6,17 @@ import torch
 
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
+from sklearn.metrics import f1_score
 
-from sklearn.metrics import f1_score  
-
-from config import Config
 from core.models import SimpleCNN
 from core.partition import dirichlet_partition
 from core.client import Client
 from core.server import Server
 
 
+# =========================
 # Utils
+# =========================
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -24,7 +24,9 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
 
 
+# =========================
 # Noise
+# =========================
 
 def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
     targets = np.array(dataset.targets)
@@ -43,14 +45,14 @@ def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
 
 
 def inject_asymmetric_noise(dataset, indices, noise_rate):
-    
+
     targets = np.array(dataset.targets)
 
     mapping = {
-        8: 0,  # ship -> airplane
-        9: 1,  # truck -> automobile
-        3: 5,  # cat -> dog
-        4: 7,  # deer -> horse
+        8: 0,
+        9: 1,
+        3: 5,
+        4: 7,
     }
 
     candidates = [idx for idx in indices if targets[idx] in mapping]
@@ -70,33 +72,38 @@ def inject_asymmetric_noise(dataset, indices, noise_rate):
 
 
 def apply_noise(dataset, indices, config, client_id):
-    # forbid asymmetric noise for non-cifar datasets
+
     if config.NOISE_TYPE == "asymmetric" and config.DATASET != "cifar10":
-        raise ValueError("Asymmetric noise only supported for CIFAR-10"
-        )
+        raise ValueError("Asymmetric noise only supported for CIFAR-10")
 
     if config.NOISE_TYPE == "symmetric":
-        inject_symmetric_noise(dataset, indices, config.NOISE_RATE, config.NUM_CLASSES)
+        inject_symmetric_noise(
+            dataset, indices, config.NOISE_RATE, config.NUM_CLASSES
+        )
 
     elif config.NOISE_TYPE == "asymmetric":
         inject_asymmetric_noise(dataset, indices, config.NOISE_RATE)
 
     elif config.NOISE_TYPE == "heterogeneous":
+
         if config.NUM_CLIENTS == 1:
             rate = config.NOISE_RATE
         else:
             rate = (client_id / (config.NUM_CLIENTS - 1)) * config.NOISE_RATE
 
-        inject_symmetric_noise(dataset, indices, rate, config.NUM_CLASSES)
+        inject_symmetric_noise(
+            dataset, indices, rate, config.NUM_CLASSES
+        )
 
     else:
         raise ValueError(f"Unknown NOISE_TYPE: {config.NOISE_TYPE}")
 
+
+# =========================
 # Data
+# =========================
 
 def load_data(config):
-
-    # EMNIST
 
     if config.DATASET == "emnist":
 
@@ -121,7 +128,9 @@ def load_data(config):
 
         np.random.seed(config.SEED)
         subset_size = min(80000, len(full_train))
-        indices = np.random.choice(len(full_train), subset_size, replace=False)
+        indices = np.random.choice(
+            len(full_train), subset_size, replace=False
+        )
 
         train_dataset = Subset(full_train, indices)
 
@@ -135,15 +144,11 @@ def load_data(config):
 
         proxy_base = full_train
 
-    # APTOS (Medical)
-
     elif config.DATASET == "aptos":
+
         from data.aptos_loader import load_aptos_raw
         train_dataset, test_dataset = load_aptos_raw(config)
         proxy_base = train_dataset
-
-
-    # CIFAR10
 
     elif config.DATASET == "cifar10":
 
@@ -168,33 +173,24 @@ def load_data(config):
     else:
         raise ValueError(f"Unknown dataset: {config.DATASET}")
 
-
-    # Proxy dataset creation
-
     proxy_dataset = None
 
     if getattr(config, "PROXY_SIZE", 0) > 0:
         proxy_size = min(config.PROXY_SIZE, len(proxy_base))
         proxy_indices = np.random.choice(
-            len(proxy_base),
-            proxy_size,
-            replace=False
+            len(proxy_base), proxy_size, replace=False
         )
         proxy_dataset = Subset(proxy_base, proxy_indices)
 
     return train_dataset, test_dataset, proxy_dataset
 
 
+# =========================
 # Clients
-
-from torch.utils.data import Subset, DataLoader
-import numpy as np
-import torch
-
+# =========================
 
 def create_clients(train_dataset, config, model_factory):
 
-    # base dataset + mapping (если train_dataset уже Subset)
     if isinstance(train_dataset, Subset):
         base_ds = train_dataset.dataset
         base_idxs = np.array(train_dataset.indices)
@@ -202,7 +198,10 @@ def create_clients(train_dataset, config, model_factory):
     else:
         base_ds = train_dataset
         base_idxs = None
-        targets = np.array(getattr(train_dataset, "targets", getattr(train_dataset, "labels", None)))
+        targets = np.array(
+            getattr(train_dataset, "targets",
+                    getattr(train_dataset, "labels", None))
+        )
 
     labels = torch.tensor(targets)
 
@@ -214,7 +213,9 @@ def create_clients(train_dataset, config, model_factory):
 
     clients = []
 
-    num_noisy_clients = int(config.NOISE_CLIENT_RATIO * config.NUM_CLIENTS)
+    num_noisy_clients = int(
+        config.NOISE_CLIENT_RATIO * config.NUM_CLIENTS
+    )
 
     print(f"Injecting noise to {num_noisy_clients}/{config.NUM_CLIENTS} clients")
     print(f"Noise type: {config.NOISE_TYPE}")
@@ -222,18 +223,19 @@ def create_clients(train_dataset, config, model_factory):
 
     for i in range(config.NUM_CLIENTS):
 
-        idx_local = np.array(client_indices[i])  # indices in train_dataset space
-
+        idx_local = np.array(client_indices[i], dtype=int)
         if base_idxs is not None:
             idx_base = base_idxs[idx_local]
         else:
             idx_base = idx_local
 
-        # noise applied to base dataset
         if i < num_noisy_clients and config.NOISE_RATE > 0:
             apply_noise(base_ds, idx_base, config, i)
 
         subset_ds = Subset(base_ds, idx_base.tolist())
+
+        if len(subset_ds) == 0:
+            continue  # пропускаем пустого клиента
 
         loader = DataLoader(
             subset_ds,
@@ -247,14 +249,12 @@ def create_clients(train_dataset, config, model_factory):
     return clients
 
 
+# =========================
 # Evaluation
-
+# =========================
 
 def evaluate_global(model, test_dataset, config):
-    """
-    Returns:
-        (accuracy, macro_f1)
-    """
+
     loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
 
     model.eval()
@@ -275,8 +275,8 @@ def evaluate_global(model, test_dataset, config):
             total += y.size(0)
             correct += (predicted == y).sum().item()
 
-            all_preds.extend(predicted.detach().cpu().numpy())
-            all_targets.extend(y.detach().cpu().numpy())
+            all_preds.extend(predicted.cpu().numpy())
+            all_targets.extend(y.cpu().numpy())
 
     acc = correct / total if total > 0 else 0.0
     macro_f1 = f1_score(all_targets, all_preds, average="macro")
@@ -295,9 +295,7 @@ def evaluate_per_client(server_model, clients, config):
             correct = 0
             total = 0
 
-            loader = client.train_loader
-
-            for x, y in loader:
+            for x, y in client.train_loader:
                 x = x.to(config.DEVICE)
                 y = y.to(config.DEVICE)
 
@@ -310,45 +308,45 @@ def evaluate_per_client(server_model, clients, config):
             acc = correct / total if total > 0 else 0.0
             client_accuracies.append(acc)
 
-    worst_acc = min(client_accuracies) if len(client_accuracies) > 0 else 0.0
-    return worst_acc
+    return min(client_accuracies) if client_accuracies else 0.0
 
 
+# =========================
 # Main
+# =========================
 
 def main():
 
-    config = Config()
-    print("DATASET =", config.DATASET)
-    set_seed(config.SEED)
+    from config import CIFARConfig, EMNISTConfig, APTOSConfig
 
-    # =========================
-    # Input channels
-    # =========================
-    if config.DATASET == "cifar10":
-        in_channels = 3
-    elif config.DATASET in ["emnist", "femnist"]:
-        in_channels = 1
-    elif config.DATASET == "aptos":
-        in_channels = 3
+    DATASET_NAME = "emnist"  # ← меняешь только это
+
+    if DATASET_NAME == "cifar10":
+        config = CIFARConfig()
+    elif DATASET_NAME == "emnist":
+        config = EMNISTConfig()
+    elif DATASET_NAME == "aptos":
+        config = APTOSConfig()
     else:
         raise ValueError("Unknown dataset")
 
-    # =========================
-    # Single model factory used by BOTH clients and server
-    # =========================
+    print("DATASET =", config.DATASET)
+    set_seed(config.SEED)
+
     def make_model():
+
         if config.DATASET == "aptos":
             import torchvision.models as models
             import torch.nn as nn
+
             m = models.resnet18(weights="IMAGENET1K_V1")
             m.fc = nn.Linear(m.fc.in_features, config.NUM_CLASSES)
             return m.to(config.DEVICE)
-        else:
-            return SimpleCNN(
-                num_classes=config.NUM_CLASSES,
-                in_channels=in_channels
-            ).to(config.DEVICE)
+
+        return SimpleCNN(
+            num_classes=config.NUM_CLASSES,
+            in_channels=config.IN_CHANNELS
+        ).to(config.DEVICE)
 
     print("=== CONFIG ===")
     print(f"DEVICE={config.DEVICE}")
@@ -361,94 +359,64 @@ def main():
     print(f"NOISE_TYPE={config.NOISE_TYPE}")
     print("==============")
 
-    # Load data
-
     train_dataset, test_dataset, proxy_dataset = load_data(config)
-    print("Train size after load_data:", len(train_dataset))
 
     clients = create_clients(train_dataset, config, make_model)
 
     global_model = make_model()
     server = Server(global_model)
 
-    log_path = f"{config.DATASET}_noise_{int(config.NOISE_RATE*100)}.csv"
+    for r in range(config.ROUNDS):
 
-    # Training loop
+        m = max(1, int(config.CLIENT_FRACTION * config.NUM_CLIENTS))
+        selected_clients = random.sample(clients, m)
 
-    with open(log_path, "w", newline="", encoding="utf-8") as f:
+        client_weights = []
+        client_sizes = []
 
-        writer = csv.writer(f)
-        writer.writerow([
-            "round",
-            "global_accuracy",
-            "macro_f1",                 
-            "worst_client_accuracy",
-            "round_time_sec",
-            "num_selected_clients"
-        ])
+        for client in selected_clients:
 
-        print("Starting training...")
+            client.model.load_state_dict(
+                server.global_model.state_dict()
+            )
 
-        for r in range(config.ROUNDS):
+            w = client.local_train(
+                global_model=server.global_model
+            )
 
-            t0 = time.time()
+            client_weights.append(w)
+            client_sizes.append(
+                len(client.train_loader.dataset)
+            )
 
-            m = max(1, int(config.CLIENT_FRACTION * config.NUM_CLIENTS))
-            selected_clients = random.sample(clients, m)
+        server.aggregate(client_weights, client_sizes)
 
-            client_weights = []
-            client_sizes = []
-
-            for client in selected_clients:
-
-                client.model.load_state_dict(
-                    server.global_model.state_dict()
-                )
-
-                w = client.local_train(global_model=server.global_model)
-                client_weights.append(w)
-                client_sizes.append(len(client.train_loader.dataset))
-
-            server.aggregate(client_weights, client_sizes)
-
-            if config.USE_R2D2 and proxy_dataset is not None:
-                server.distill(
-                    [client.model for client in selected_clients],
-                    proxy_dataset,
-                    config
-                )
-
-            global_acc, macro_f1_val = evaluate_global(
-                server.global_model,
-                test_dataset,
+        if config.USE_R2D2 and proxy_dataset is not None:
+            server.distill(
+                [c.model for c in selected_clients],
+                proxy_dataset,
                 config
             )
 
-            worst_acc = evaluate_per_client(
-                server.global_model,
-                clients,
-                config
-            )
+        global_acc, macro_f1_val = evaluate_global(
+            server.global_model,
+            test_dataset,
+            config
+        )
 
-            dt = time.time() - t0
+        worst_acc = evaluate_per_client(
+            server.global_model,
+            clients,
+            config
+        )
 
-            print(
-                f"Round {r+1:03d} | "
-                f"Global={global_acc:.4f} | "
-                f"MacroF1={macro_f1_val:.4f} | "
-                f"Worst={worst_acc:.4f} | "
-                f"time={dt:.1f}s | "
-                f"clients={m}"
-            )
+        print(
+            f"Round {r+1:03d} | "
+            f"Global={global_acc:.4f} | "
+            f"MacroF1={macro_f1_val:.4f} | "
+            f"Worst={worst_acc:.4f}"
+        )
 
-            writer.writerow([
-                r + 1,
-                f"{global_acc:.6f}",
-                f"{macro_f1_val:.6f}",     
-                f"{worst_acc:.6f}",
-                f"{dt:.3f}",
-                m
-            ])
 
 if __name__ == "__main__":
     main()
