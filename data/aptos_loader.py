@@ -4,6 +4,21 @@ from torchvision.datasets import ImageFolder
 from torchvision import transforms
 from torch.utils.data import random_split
 
+import os
+import numpy as np
+from PIL import Image
+
+
+def create_mini_aptos():
+    print("APTOS not found. Creating mini dataset...")
+
+    for cls in range(5):
+        folder = f"data/aptos/train/{cls}"
+        os.makedirs(folder, exist_ok=True)
+
+        for i in range(5):
+            img = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
+            Image.fromarray(img).save(f"{folder}/img_{i}.jpg")
 
 def load_aptos_raw(config):
 
@@ -32,6 +47,8 @@ def load_aptos_raw(config):
     # =========================
     # Load dataset
     # =========================
+    if not os.path.exists("data/aptos/train"):
+        create_mini_aptos()
     full_dataset = ImageFolder(
         root="data/aptos/train",
         transform=train_transform
