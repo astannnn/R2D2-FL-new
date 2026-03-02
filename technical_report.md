@@ -24,9 +24,50 @@ All experiments were conducted using fixed random seeds and deterministic data p
 
 ---
 
-## 2. Baseline Methods
+## 2. Configuration Design
 
-### 2.1 FedAvg
+The implementation follows a **dataset-specific configuration architecture** to ensure modularity and reproducibility.
+
+A shared `BaseConfig` class defines global training structure and common hyperparameters.
+
+Three specialized configurations extend it:
+
+- `CIFARConfig`
+- `EMNISTConfig`
+- `APTOSConfig`
+
+Each configuration specifies:
+
+- Number of classes  
+- Input dimensions  
+- Model architecture  
+- Learning rate  
+- Number of communication rounds  
+- Local epochs  
+- Noise settings  
+- Proxy dataset size  
+
+The training pipeline is fully dataset-agnostic:
+
+```python
+config = CIFARConfig()
+main(config)
+```
+
+The `main(config)` function dynamically adapts to the selected dataset without modifying the training logic.
+
+This design ensures:
+
+- Clean separation of experiment settings  
+- Consistent baseline comparison  
+- Easy hyperparameter control  
+- Extensibility to new datasets  
+
+---
+
+## 3. Baseline Methods
+
+### 3.1 FedAvg
 
 FedAvg is implemented as the standard federated parameter averaging algorithm with:
 
@@ -35,11 +76,11 @@ FedAvg is implemented as the standard federated parameter averaging algorithm wi
 - Weighted aggregation based on local dataset size  
 - Shared global model architecture  
 
-FedAvg serves as the primary reference baseline for all experiments.
+FedAvg serves as the primary reference baseline.
 
 ---
 
-### 2.2 FedProx
+### 3.2 FedProx
 
 FedProx extends FedAvg by adding a proximal regularization term to the local objective:
 
@@ -49,15 +90,13 @@ FedProx extends FedAvg by adding a proximal regularization term to the local obj
 
 This term reduces client drift under heterogeneous data distributions.
 
-FedProx is used to evaluate whether proximal regularization alone is sufficient to improve robustness under noisy and non-IID conditions.
+FedProx is used to evaluate whether proximal regularization alone improves robustness under noise.
 
 ---
 
-## 3. Data Partitioning and Noise Modeling
+## 4. Data Partitioning and Noise Modeling
 
-To simulate realistic federated learning environments, the following protocol was implemented:
-
-### 3.1 Non-IID Partitioning
+### 4.1 Non-IID Partitioning
 
 - Dirichlet-based partitioning with α = 0.3  
 - Configurable number of clients  
@@ -67,7 +106,7 @@ This creates heterogeneous class distributions across clients.
 
 ---
 
-### 3.2 Noise Regimes
+### 4.2 Noise Regimes
 
 The following corruption scenarios were implemented:
 
@@ -79,21 +118,15 @@ The following corruption scenarios were implemented:
 
 Noise is injected **after client partitioning**, ensuring realistic local corruption patterns.
 
-This enables simulation of:
+---
 
-- Uniform random corruption  
-- Structured label flips  
-- Client-specific reliability variability  
+## 5. R2D2-FL Framework
+
+R2D2-FL replaces direct parameter averaging with reliability-weighted proxy-based distillation.
 
 ---
 
-## 4. R2D2-FL Framework
-
-R2D2-FL extends standard federated learning by replacing direct parameter aggregation with reliability-weighted distillation.
-
----
-
-## 4.1 Client-Side Components
+## 5.1 Client-Side Components
 
 Each client performs local training with:
 
@@ -109,11 +142,7 @@ For low-confidence samples:
 \tilde{y}_i = \lambda y_i + (1-\lambda) p_{global}(x_i)
 \]
 
-This reduces the impact of noisy labels.
-
 ### 3. Local Knowledge Distillation
-
-A KL divergence term aligns local predictions with the global teacher:
 
 \[
 \mathcal{L}_{locKD} = KL(p_{global} \| p_{local})
@@ -127,7 +156,7 @@ Final local objective:
 
 ---
 
-## 4.2 Server-Side Components
+## 5.2 Server-Side Components
 
 After receiving client models, the server performs:
 
@@ -135,10 +164,10 @@ After receiving client models, the server performs:
 
 Using a proxy dataset:
 
-- Compute predictions from each client
-- Measure agreement with ensemble majority
-- Derive client-level reliability \( r_k \)
-- Compute class-level reliability \( r_{k,c} \)
+- Compute predictions from each client  
+- Measure agreement with ensemble majority  
+- Derive client-level reliability \( r_k \)  
+- Compute class-level reliability \( r_{k,c} \)  
 
 ---
 
@@ -170,7 +199,7 @@ Key hyperparameters:
 
 ---
 
-## 5. Communication Round Procedure
+## 6. Communication Round Procedure
 
 Each federated round follows:
 
@@ -183,58 +212,59 @@ Each federated round follows:
 7. Distill global model on proxy dataset  
 8. Broadcast updated global model  
 
-Unlike FedAvg, global updates are driven by **proxy-based distillation rather than direct parameter averaging**.
+Global updates are driven by **distillation**, not direct parameter averaging.
 
 ---
 
-## 6. Experimental Setup
+## 7. Experimental Setup
 
 ### Datasets
 
-- **CIFAR-10** (natural image classification)  
+- **CIFAR-10**  
 - **EMNIST (Digits split)**  
 - **APTOS 2019 (Retinal classification)**  
+
+Each dataset uses its own configuration class.
 
 ### Metrics
 
 - Global test accuracy  
 - Worst-client accuracy  
 - Macro-F1 (APTOS)  
-- Convergence behavior across rounds  
+- Convergence across rounds  
 
 Each experiment:
 
 - Repeated across multiple seeds  
 - Logged per round  
-- Averaged for final comparison  
+- Averaged for comparison  
 
 ---
 
-## 7. Experimental Findings
+## 8. Experimental Findings
 
 ### CIFAR-10
 
 - R2D2-FL improves worst-client robustness under symmetric noise.
 - Gains are more visible at 40% corruption.
-- Under clean settings, performance is comparable to FedAvg.
+- Clean performance is comparable to FedAvg.
 
 ### EMNIST
 
-- R2D2-FL improves stability in moderate noise.
-- Under extreme symmetric noise, performance becomes configuration-sensitive.
-- Reliability weighting helps reduce degradation for minority classes.
+- Improved stability in moderate noise.
+- Performance becomes configuration-sensitive under extreme corruption.
 
-### APTOS (Medical Dataset)
+### APTOS
 
-- Performance is dataset-dependent.
-- FedAvg occasionally achieves higher global accuracy.
-- R2D2-FL provides more stable behavior across clients but requires careful tuning.
+- Results are dataset-dependent.
+- FedAvg sometimes achieves higher global accuracy.
+- R2D2-FL provides improved robustness consistency across clients.
 
 ---
 
-## 8. Ablation Study
+## 9. Ablation Study
 
-Ablation experiments were conducted on CIFAR-10 under 40% symmetric noise.
+Conducted on CIFAR-10 under 40% symmetric noise.
 
 Components removed individually:
 
@@ -243,40 +273,40 @@ Components removed individually:
 - Soft label correction  
 - Local distillation  
 
-### Observations
+Observations:
 
-- Removing local KD can increase global accuracy but reduces worst-client robustness.
-- Removing soft label correction increases sensitivity to noisy labels.
-- Removing reliability weighting reduces stability under heterogeneous corruption.
+- Removing local KD reduces worst-client robustness.
+- Removing soft label correction increases sensitivity to label noise.
+- Removing reliability weighting decreases stability under heterogeneous corruption.
 
-This confirms that robustness emerges from the interaction of all components.
+Robustness emerges from the interaction of all components.
 
 ---
 
-## 9. Reproducibility and Modularity
+## 10. Reproducibility and Modularity
 
-The implementation provides:
+The framework provides:
 
-- Fully modular architecture  
+- Modular architecture  
 - Dataset-agnostic pipeline  
-- Configurable hyperparameters  
+- Configuration-based experiment control  
 - Deterministic data partitioning  
-- Round-wise logging  
+- Structured logging  
 - Google Colab validation notebooks  
 
-All results are reproducible from configuration files.
+All experiments are reproducible from configuration files.
 
 ---
 
-## 10. Final Conclusions
+## 11. Final Conclusions
 
-This project delivers a complete, modular, and reproducible implementation of **R2D2-FL**.
+This project delivers a complete and modular implementation of **R2D2-FL**.
 
 Key conclusions:
 
 - Reliability-weighted distillation improves robustness under symmetric corruption.
-- Gains are dataset-dependent and sensitive to hyperparameter tuning.
-- Proxy-based aggregation provides stability benefits under heterogeneous client corruption.
-- Performance improvements are strongest in balanced multi-class datasets.
+- Performance gains are dataset-dependent.
+- Proxy-based aggregation stabilizes learning under heterogeneous client corruption.
+- Careful hyperparameter tuning is required for highly imbalanced medical datasets.
 
-The framework establishes a structured robustness benchmark for noisy federated learning and serves as a foundation for further research in reliability-aware aggregation.
+The framework establishes a structured robustness benchmark for noisy federated learning and provides a foundation for further research on reliability-aware aggregation.
