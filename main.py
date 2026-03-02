@@ -315,21 +315,11 @@ def evaluate_per_client(server_model, clients, config):
 # Main
 # =========================
 
-def main():
+def main(config=None):
 
-    from config import CIFARConfig, EMNISTConfig, APTOSConfig
-
-    DATASET_NAME = "emnist"  # ← меняешь только это
-
-    if DATASET_NAME == "cifar10":
-        config = CIFARConfig()
-    elif DATASET_NAME == "emnist":
-        config = EMNISTConfig()
-    elif DATASET_NAME == "aptos":
-        config = APTOSConfig()
-    else:
-        raise ValueError("Unknown dataset")
-
+    if config is None:
+        from config import EMNISTConfig
+    config = EMNISTConfig()
     print("DATASET =", config.DATASET)
     set_seed(config.SEED)
 
