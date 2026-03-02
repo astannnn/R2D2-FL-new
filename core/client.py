@@ -33,17 +33,13 @@ class Client:
                 optimizer.zero_grad()
                 logits = self.model(x)
 
-                # ======================================================
-                # 1️⃣ FedAvg (no global model)
-                # ======================================================
+                # 1️ FedAvg (no global model)
                 if global_model is None:
                     loss = F.cross_entropy(logits, y)
 
                 else:
 
-                    # ==================================================
-                    # 2️⃣ FedProx
-                    # ==================================================
+                    # 2️ FedProx
                     if getattr(self.config, "USE_FEDPROX", False) and not self.config.USE_R2D2:
 
                         ce_loss = F.cross_entropy(logits, y)
@@ -57,9 +53,7 @@ class Client:
 
                         loss = ce_loss + 0.5 * self.config.MU * prox_loss
 
-                    # ==================================================
-                    # 3️⃣ R2D2
-                    # ==================================================
+                    # 3️ R2D2
                     elif self.config.USE_R2D2:
 
                         with torch.no_grad():
@@ -109,7 +103,7 @@ class Client:
 
                         sup_loss = hard_loss + soft_loss
 
-                        # ---------- Local KD ----------
+                        # Local KD 
                         if getattr(self.config, "USE_LOCAL_KD", True):
 
                             kd_loss = F.kl_div(
@@ -126,9 +120,7 @@ class Client:
                         else:
                             loss = sup_loss
 
-                    # ==================================================
-                    # 4️⃣ Plain FedAvg fallback
-                    # ==================================================
+                    # 4️ Plain FedAvg fallback
                     else:
                         loss = F.cross_entropy(logits, y)
 
