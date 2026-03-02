@@ -9,9 +9,8 @@ class Server:
     def __init__(self, global_model):
         self.global_model = global_model
 
-    # -------------------------------------------------
     # Weighted FedAvg aggregation
-    # -------------------------------------------------
+    
     print("Aggregate signature:", "weighted")
     def aggregate(self, client_weights, client_sizes):
         total = float(sum(client_sizes))
@@ -26,9 +25,9 @@ class Server:
 
         self.global_model.load_state_dict(new_weights)
 
-    # -------------------------------------------------
+
     # R2D2-FL Distillation
-    # -------------------------------------------------
+
     def distill(self, client_models, proxy_dataset, config, print_stats=True):
 
         device = config.DEVICE
@@ -49,9 +48,8 @@ class Server:
         agree_by_class = None
         total_by_class = None
 
-        # -------------------------------------------------
         # Reliability estimation
-        # -------------------------------------------------
+
         with torch.no_grad():
             for x, _ in loader:
                 x = x.to(device)
@@ -107,9 +105,8 @@ class Server:
         sig_rk = sig_rk.to(device)
         sig_rkc = sig_rkc.to(device)
 
-        # -------------------------------------------------
         # Proxy Distillation
-        # -------------------------------------------------
+
         self.global_model.train()
         optimizer = torch.optim.SGD(
             self.global_model.parameters(), lr=config.LR
@@ -153,7 +150,7 @@ class Server:
 
                 if getattr(config, "USE_RELIABILITY", True):
 
-                    # ===== Class-level gate =====
+                    # Class-level gate
                     if getattr(config, "USE_CLASS_RELIABILITY", True):
                         class_gate = sig_rkc[k, maj]
                     else:
