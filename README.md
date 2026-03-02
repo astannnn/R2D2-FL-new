@@ -1,88 +1,74 @@
 # R2D2-FL: Reliability-Weighted Robust Distillation for Federated Learning
 
-## Project Structure
+This repository implements a modular Federated Learning (FL) framework for studying robustness under label noise, including the proposed **Reliability-Weighted Robust Distillation (R2D2-FL)** method.
+
+The project supports multiple datasets and provides reproducible Google Colab notebooks for full pipeline validation.
+
+---
+
+## 📂 Project Structure
 
 ```
-.
-├── main.py                # Main training script
-├── config.py              # Hyperparameter configuration
+R2D2-FL/
+│
+├── main.py                  # Dataset-agnostic training pipeline
+├── config.py                # BaseConfig + dataset-specific configurations
 ├── README.md
 ├── technical_report.md
 │
-├── core/                  # Core Federated Learning logic
-│   ├── __init__.py
-│   ├── client.py          # Client-side local training (FedAvg, FedProx, R2D2)
-│   ├── server.py          # Server aggregation and distillation logic
-│   ├── partition.py       # Dirichlet data partitioning
-│   ├── models.py          # Model architectures
+├── test_cifar.ipynb         # CIFAR-10 sanity notebook (Colab-ready)
+├── test_emnist.ipynb        # EMNIST sanity notebook (Colab-ready)
+├── test_aptos.ipynb         # APTOS sanity notebook (Colab-ready)
+│
+├── core/
+│   ├── client.py            # Client-side training (FedAvg, FedProx, R2D2)
+│   ├── server.py            # Aggregation and distillation logic
+│   ├── partition.py         # Dirichlet non-IID partitioning
+│   ├── models.py            # Model architectures
 │
 └── data/
-    └── aptos_loader.py    # APTOS medical dataset loader
+    └── aptos_loader.py      # APTOS dataset loader
 ```
 
 ---
 
-## Requirements
+## ▶ Quick Pipeline Validation (Google Colab)
 
-- Python 3.9+
-- PyTorch
+The following notebooks validate the full training pipeline in a clean environment:
 
-Install dependencies:
+- **CIFAR-10 (Sanity Check)**  
+  https://colab.research.google.com/github/astannnn/R2D2-FL/blob/main/test_cifar.ipynb
 
-```bash
-pip install torch torchvision numpy tqdm matplotlib
-```
+- **EMNIST (Sanity Check)**  
+  https://colab.research.google.com/github/astannnn/R2D2-FL/blob/main/test_emnist.ipynb
 
----
+- **APTOS (Sanity Check – Mini Fallback Dataset)**  
+  https://colab.research.google.com/github/astannnn/R2D2-FL/blob/main/test_aptos.ipynb
 
-## Supported Datasets
+Each notebook:
 
-### CIFAR-10
-Automatically downloaded via torchvision.
+- Automatically clones the repository  
+- Runs a minimal configuration (1 round, 1 epoch)  
+- Verifies data loading, partitioning, training, aggregation, and evaluation  
 
-### EMNIST (Digits split)
-Automatically downloaded via torchvision.
-
-### APTOS 2019 (Medical Retinopathy Dataset)
-
-If the dataset is not found locally, a small synthetic fallback dataset is automatically generated to verify that the training pipeline runs correctly.
-
-To run full APTOS experiments:
-
-Download the dataset from Kaggle:
-https://www.kaggle.com/competitions/aptos2019-blindness-detection
-
-Extract training images into:
-
-```
-data/aptos/train/
-```
-
-Folder structure:
-
-```
-data/aptos/train/
- ├── 0/
- ├── 1/
- ├── 2/
- ├── 3/
- └── 4/
-```
+These notebooks are intended for reproducibility validation only.
 
 ---
 
-## Configuration
+## ⚙ Configuration
 
 All hyperparameters are defined in `config.py`.
 
-Configuration classes:
+### Configuration Classes
 
-- `BaseConfig`
-- `CIFARConfig`
-- `EMNISTConfig`
-- `APTOSConfig`
+- `BaseConfig` – shared hyperparameters  
+- `CIFARConfig`  
+- `EMNISTConfig`  
+- `APTOSConfig`  
 
-Key parameters:
+The `main(config)` function is fully dataset-agnostic and dynamically adapts to the selected configuration.
+
+### Key Parameters
 
 - `NUM_CLIENTS`
 - `CLIENT_FRACTION`
@@ -97,38 +83,80 @@ Key parameters:
 - `USE_FEDPROX`
 - `SEED`
 
-To switch datasets, modify the dataset selection inside `main.py`.
+---
+
+## 📊 Supported Datasets
+
+### CIFAR-10
+
+Automatically downloaded via `torchvision`.
+
+### EMNIST (Digits split)
+
+Automatically downloaded via `torchvision`.
+
+### APTOS 2019 (Diabetic Retinopathy Dataset)
+
+If the dataset is not found locally, a small synthetic fallback dataset is automatically generated to ensure the training pipeline executes correctly.
 
 ---
 
-## Federated Data Simulation
+## 🏥 Running Full APTOS Experiments
 
-- Dirichlet-based non-IID partitioning (α configurable)
+To execute full medical experiments:
+
+1. Download the official dataset:  
+   **APTOS 2019 Blindness Detection**  
+   https://www.kaggle.com/competitions/aptos2019-blindness-detection
+
+2. Place the dataset in the following structure:
+
+```
+data/aptos/
+    train_images/
+    train.csv
+```
+
+3. Run using:
+
+```python
+from config import APTOSConfig
+from main import main
+
+config = APTOSConfig()
+main(config)
+```
+
+---
+
+## 🧠 Federated Data Simulation
+
+- Dirichlet-based non-IID client partitioning (α configurable)
 - Symmetric label noise
 - Asymmetric label noise
 - Heterogeneous client-level corruption
 
-Noise injection is applied after client partitioning.
+Noise is injected after client partitioning.
 
 ---
 
-## Implemented Methods
+## 🏗 Implemented Methods
 
 ### Baselines
 
 - FedAvg
 - FedProx
 
-### Proposed Method
+### Proposed Method: R2D2-FL
 
-**R2D2-FL**
+#### Client-side
 
-Client-side:
 - Confidence-based sample selection
 - Soft label correction
 - Local knowledge distillation
 
-Server-side:
+#### Server-side
+
 - Client-level reliability estimation
 - Class-level reliability weighting
 - Reliability-weighted ensemble teacher
@@ -136,33 +164,30 @@ Server-side:
 
 ---
 
-## Running Experiments
+## ▶ Running Experiments (Local / VM)
 
 ```bash
+git clone https://github.com/astannnn/R2D2-FL.git
+cd R2D2-FL
 python main.py
 ```
 
-Control method via:
-
-```python
-USE_R2D2 = True  # or False
-USE_FEDPROX = True  # or False
-```
+Modify configuration parameters in `config.py` before execution.
 
 ---
 
-## Evaluation Metrics
+## 📈 Evaluation Metrics
 
 - Global test accuracy
 - Worst-client accuracy
 - Macro-F1 (APTOS)
-- Convergence curves
+- Convergence across rounds
 
-Results are averaged across multiple seeds.
+Results are averaged across multiple random seeds.
 
 ---
 
-## Reproducibility
+## 🔁 Reproducibility
 
 - Fixed random seeds
 - Deterministic data partitioning
@@ -171,12 +196,12 @@ Results are averaged across multiple seeds.
 
 ---
 
-## Summary
+## 🎯 Summary
 
-R2D2-FL introduces reliability-aware aggregation through proxy-based distillation.
+R2D2-FL introduces reliability-aware aggregation via proxy-based distillation and evaluates robustness under:
 
-The framework benchmarks robustness under:
-
-- Non-IID distributions
+- Non-IID client distributions
 - Symmetric and asymmetric label noise
 - Heterogeneous client corruption
+
+The framework is modular, extensible, and designed for research-grade experimentation in noisy federated settings.
