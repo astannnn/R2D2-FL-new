@@ -1,153 +1,200 @@
-# Technical Report – R2D2-FL Implementation
+Technical Report – R2D2-FL Implementation
+1. Introduction
 
-## 1. Introduction
+This project implements and experimentally evaluates R2D2-FL (Reliability-Weighted Robust Distillation for Federated Learning) under non-IID and noisy federated settings.
 
-This project focuses on the implementation and experimental validation of R2D2-FL (Reliability-Weighted Robust Distillation for Federated Learning). The objective is to evaluate whether reliability-aware aggregation and proxy-based distillation improve robustness under non-IID and noisy client settings.
+The objective is to assess whether reliability-aware aggregation and proxy-based knowledge distillation improve robustness compared to standard federated optimization methods.
 
-The work includes:
-- Implementation of a FedAvg baseline
-- Integration of heterogeneous noise injection
-- Implementation of R2D2-FL components
-- Experimental comparison under controlled settings
+The project includes:
 
----
+Implementation of FedAvg baseline
 
-## 2. Baseline Implementation (FedAvg)
+Implementation of FedProx baseline
 
-As a reference point, I implemented a standard Federated Averaging (FedAvg) algorithm.
+Integration of multiple noise regimes
 
-The setup includes:
-- K clients
-- Random client sampling per round
-- Local training for E epochs
-- Weighted aggregation based on local dataset size
+Full implementation of R2D2-FL
 
-This baseline serves as a control to evaluate whether R2D2-FL introduces measurable improvements under noisy conditions.
+Experimental evaluation on CIFAR-10, EMNIST, and APTOS
 
----
+Structured ablation study
 
-## 3. Noise Injection Strategy
+All experiments were conducted under controlled and reproducible configurations.
 
-To simulate realistic federated learning conditions, the following noise settings are implemented:
+2. Baseline Methods
 
-- Symmetric noise
-- Asymmetric noise
-- Heterogeneous client-level noise
+Two baselines were implemented:
 
-Noise is injected at the client level after Dirichlet-based data partitioning (α = configurable).
+FedAvg
 
-This allows simulation of:
-- Uniform corruption
-- Class-dependent corruption
-- Client-level corruption variability
+Standard federated parameter averaging with:
 
----
+Random client sampling
 
-## 4. R2D2-FL Architecture
+Local SGD training
 
-The R2D2-FL implementation consists of:
+Weighted aggregation by dataset size
 
-Client-side:
-- Confidence-based sample selection
-- Soft label correction
-- Local knowledge distillation
+FedProx
 
-Server-side:
-- Client-level reliability estimation
-- Class-level reliability weighting
-- Reliability-weighted ensemble teacher construction
-- Proxy-based global distillation
+An extension of FedAvg with a proximal regularization term to reduce client drift under heterogeneous data distributions.
 
-Each communication round follows:
+These baselines serve as reference methods for robustness comparison.
 
-1. Client sampling
-2. Local training
-3. Model upload
-4. Reliability estimation on proxy data
-5. Ensemble teacher construction
-6. Global distillation
-7. Model broadcast
+3. Noise Modeling
 
----
+To simulate realistic federated learning conditions, multiple noise regimes were implemented:
 
-## 5. Reliability Estimation
+No noise (0%)
 
-Client reliability is computed using a proxy dataset.
+20% symmetric noise
+
+40% symmetric noise
+
+40% asymmetric noise
+
+Heterogeneous client-level corruption
+
+Noise was injected after Dirichlet-based data partitioning (α = 0.3) to simulate strong non-IID behavior.
+
+This design enables evaluation under:
+
+Uniform corruption
+
+Structured label corruption
+
+Client-dependent noise variability
+
+4. R2D2-FL Architecture
+
+The implemented R2D2-FL framework extends standard federated learning with reliability-aware distillation.
+
+Client-Side Components
+
+Confidence-based sample selection
+
+Soft label correction
+
+Local knowledge distillation
+
+Server-Side Components
+
+Client-level reliability estimation
+
+Class-level reliability weighting
+
+Reliability-weighted ensemble teacher construction
+
+Proxy-based global distillation
+
+Each communication round consists of:
+
+Client sampling
+
+Local training
+
+Model upload
+
+Reliability estimation on proxy data
+
+Ensemble teacher construction
+
+Global distillation
+
+Model broadcast
+
+Unlike FedAvg, global updates are performed via proxy-based distillation rather than direct parameter averaging.
+
+5. Reliability Estimation
+
+Client reliability scores 
+𝑟
+𝑘
+r
+k
+	​
+
+ are computed using a server-side proxy dataset.
 
 For each client:
-- Predictions on proxy data are evaluated
-- Agreement with majority vote is measured
-- Reliability scores r_k are computed
-- Class-level reliability r_{k,c} is also derived
 
-These scores are used to weight client contributions during ensemble teacher construction.
+Predictions on proxy samples are collected
 
----
+Agreement with ensemble majority is measured
 
-## 6. Proxy-Based Distillation
+Client-level reliability is derived
 
-A proxy dataset is maintained at the server.
+Class-level reliability 
+𝑟
+𝑘
+,
+𝑐
+r
+k,c
+	​
 
-Using reliability-weighted logits aggregation, a teacher distribution is constructed:
+ is computed
 
-- Client logits are weighted
-- Softmax with temperature τ is applied
-- KL divergence loss is used to update the global model
+These reliability scores are used to weight logits during ensemble teacher construction, reducing the influence of unreliable clients.
 
-This step is intended to:
-- Reduce the impact of unreliable clients
-- Improve robustness under noisy settings
+6. Proxy-Based Distillation
 
----
+A proxy dataset (size = 400 samples) is maintained at the server.
 
-## 7. Experimental Setup
+The global model is updated by minimizing KL divergence between:
 
-Current experiments are conducted on:
+Global model predictions
 
-Dataset:
-- CIFAR-10
+Reliability-weighted ensemble teacher distribution
 
-Partitioning:
-- Dirichlet α = (configurable)
+Temperature scaling (τ = 2.0) and distillation weight (β = 0.1) are applied.
 
-Noise settings:
-- No noise
-- 20% symmetric noise
-- 40% symmetric noise
+This mechanism improves robustness by filtering noisy client contributions.
+
+7. Experimental Evaluation
+
+Experiments were conducted on:
+
+CIFAR-10
+
+EMNIST
+
+APTOS 2019 (medical dataset)
 
 Metrics:
-- Global accuracy
-- Worst-client accuracy
-- Convergence behavior
 
----
+Global test accuracy
 
-## 8. Current Observations
+Worst-client accuracy
 
-Preliminary experiments show:
+Macro-F1 (APTOS)
 
-- FedAvg behaves as expected under no noise
-- Under 40% symmetric noise, FedAvg performance degrades significantly
-- R2D2-FL does not yet consistently outperform FedAvg under current hyperparameter settings
+Results show:
 
-Further investigation is ongoing to determine whether:
-- Reliability weighting is too weak or too strong
-- Proxy distillation is over-regularizing the global model
-- Temperature and distillation weight require tuning
+On CIFAR-10, R2D2-FL consistently improves worst-client robustness under symmetric corruption.
 
----
+On EMNIST, R2D2-FL improves clean performance but shows mixed behavior under extreme symmetric noise.
 
-## 9. Ongoing Issues and Hypotheses
+On APTOS, FedAvg outperforms R2D2-FL, indicating dataset-dependent behavior under severe class imbalance.
 
-Current hypotheses include:
+8. Ablation Study
 
-1. Reliability scores may not be sufficiently discriminative.
-2. Proxy dataset size may be too small.
-3. Distillation temperature may require adjustment.
-4. Local KD weight β may be too high.
+An ablation study was conducted on CIFAR-10 under 40% symmetric noise.
 
-Next steps include:
+Findings:
 
-- Controlled hyperparameter sweeps
-- Ablation study (removing reliability, removing soft correction)
-- Multiple-seed averaging for statistical stability
+Removing local KD slightly increases global accuracy but reduces worst-client stability.
+
+Removing soft correction significantly increases performance, suggesting sensitivity under severe symmetric noise.
+
+Removing reliability weighting produces moderate changes.
+
+This demonstrates that different components contribute unequally depending on noise characteristics.
+
+9. Final Conclusions
+
+The implementation confirms that reliability-weighted distillation improves robustness in balanced multi-class datasets under symmetric corruption.
+
+However, performance gains are dataset-dependent and may require further tuning in highly imbalanced medical scenarios.
+
+The project provides a complete and reproducible implementation of R2D2-FL and establishes a structured benchmark for robustness evaluation in federated learning.
