@@ -1,72 +1,163 @@
 # R2D2-FL: Reliability-Weighted Robust Distillation for Federated Learning
 
-This repository contains the implementation of R2D2-FL, a reliability-aware federated learning framework designed to improve robustness under heterogeneous and noisy client settings.
+This repository contains the implementation of **R2D2-FL**, a reliability-aware federated learning framework designed to improve robustness under heterogeneous and noisy client environments.
 
-## Structure
+The method integrates reliability estimation and proxy-based knowledge distillation to mitigate the impact of corrupted or unreliable clients in non-IID federated settings.
 
-- main.py – main training script
-- config.py – configuration file with hyperparameters
-- core/ – implementation of server, client, reliability, distillation, and training modules
+---
+
+## Project Structure
+main.py # Main training script
+config.py # Hyperparameter configuration
+core/ # Core FL implementation
+├── client.py
+├── server.py
+├── reliability.py
+├── distillation.py
+├── partition.py
+└── models.py
+
+
+---
 
 ## Requirements
 
-Python 3.9+
+- Python 3.9+
+- PyTorch
 
 Install dependencies:
 
+```bash
 pip install torch torchvision numpy tqdm matplotlib
-
-## Dataset
+Supported Datasets
 
 Currently implemented:
-- CIFAR-10 (automatically downloaded via torchvision)
 
-Non-IID simulation:
-- Dirichlet partitioning (alpha configurable in config.py)
-- Symmetric noise
-- Asymmetric noise
-- Heterogeneous client-level noise
+CIFAR-10
 
-## Configuration
+EMNIST
 
-All hyperparameters are defined in config.py:
+APTOS 2019 (Medical Dataset)
 
-- NUM_CLIENTS
-- CLIENT_FRACTION
-- LOCAL_EPOCHS
-- ROUNDS
-- LR
-- DIRICHLET_ALPHA
-- NOISE_RATE
-- NOISE_TYPE
-- PROXY_SIZE
-- SEED
+CIFAR-10 and EMNIST are automatically downloaded via torchvision.
+
+APTOS requires manual dataset preparation.
+
+Federated Data Simulation
+
+The framework supports realistic non-IID and noisy federated scenarios:
+
+Dirichlet-based data partitioning (α configurable)
+
+Symmetric label noise
+
+Asymmetric label noise
+
+Heterogeneous client-level corruption
+
+Noise injection is performed after client data partitioning.
+
+Implemented Methods
+Baselines
+
+FedAvg
+
+FedProx
+
+Proposed Method
+
+R2D2-FL, including:
+
+Client-side:
+
+Confidence-based sample selection
+
+Soft label correction
+
+Local knowledge distillation
+
+Server-side:
+
+Client-level reliability estimation
+
+Class-level reliability weighting
+
+Reliability-weighted ensemble teacher construction
+
+Proxy-based global distillation
+
+Configuration
+
+All hyperparameters are defined in config.py.
+
+Key parameters include:
+
+NUM_CLIENTS
+
+CLIENT_FRACTION
+
+LOCAL_EPOCHS
+
+ROUNDS
+
+LR
+
+DIRICHLET_ALPHA
+
+NOISE_RATE
+
+NOISE_TYPE
+
+PROXY_SIZE
+
+SEED
+
+USE_R2D2
+
+USE_FEDPROX
 
 Modify config.py before running experiments.
 
-## Running Experiments
+Running Experiments
 
-To run training:
+To start training:
 
 python main.py
 
-Experiment type (FedAvg or R2D2) is controlled inside main.py or config.py.
+Experiment type is controlled via:
 
-## Implemented Components
+USE_R2D2 = True/False
 
-Client-side:
-- Confidence-based sample selection
-- Soft label correction
-- Local knowledge distillation
+USE_FEDPROX = True/False
 
-Server-side:
-- Client-level reliability estimation
-- Class-level reliability weighting
-- Reliability-weighted ensemble teacher
-- Proxy-based distillation
+Evaluation Metrics
 
-## Reproducibility
+Global test accuracy
 
-- Fixed random seed
-- Deterministic partitioning
-- Configurable hyperparameters
+Worst-client accuracy
+
+Macro-F1 score (APTOS)
+
+Results are averaged across multiple seeds for statistical stability.
+
+Reproducibility
+
+Fixed random seeds
+
+Deterministic data partitioning
+
+Fully configurable hyperparameters
+
+Logging of training rounds
+
+Summary
+
+R2D2-FL introduces reliability-aware aggregation through proxy-based distillation.
+
+The implementation provides a structured benchmark for evaluating robustness under:
+
+Non-IID data distributions
+
+Symmetric and asymmetric label corruption
+
+Client-level corruption variability
