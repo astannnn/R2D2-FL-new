@@ -317,9 +317,6 @@ def evaluate_per_client(server_model, clients, config):
 
 def main(config=None):
 
-    if config is None:
-        from config import EMNISTConfig
-    config = EMNISTConfig()
     print("DATASET =", config.DATASET)
     set_seed(config.SEED)
 
