@@ -68,7 +68,7 @@ class Client:
 
                         mask = conf > self.config.CONF_THRESHOLD
                         y_onehot = F.one_hot(y, num_classes=self.config.NUM_CLASSES).float()
-                        # ---------- Hard samples ----------
+                        # Hard samples
                         if mask.sum() > 0:
                             hard_loss = F.cross_entropy(
                                 logits[mask],
@@ -77,7 +77,7 @@ class Client:
                         else:
                             hard_loss = torch.tensor(0.0, device=device)
 
-                        # ---------- Suspicious samples ----------
+                        # Suspicious samples
                         if (~mask).sum() > 0:
 
                             if getattr(self.config, "USE_SOFT_CORRECTION", True):
