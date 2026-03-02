@@ -7,7 +7,7 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 
-from sklearn.metrics import f1_score  # NEW
+from sklearn.metrics import f1_score  
 
 from config import Config
 from core.models import SimpleCNN
@@ -16,9 +16,7 @@ from core.client import Client
 from core.server import Server
 
 
-# =========================
 # Utils
-# =========================
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -26,9 +24,7 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
 
 
-# =========================
 # Noise
-# =========================
 
 def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
     targets = np.array(dataset.targets)
@@ -47,10 +43,7 @@ def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
 
 
 def inject_asymmetric_noise(dataset, indices, noise_rate):
-    """
-    CIFAR-10 specific mapping.
-    Keep it for cifar10; DO NOT use for aptos/emnist.
-    """
+    
     targets = np.array(dataset.targets)
 
     mapping = {
@@ -79,9 +72,7 @@ def inject_asymmetric_noise(dataset, indices, noise_rate):
 def apply_noise(dataset, indices, config, client_id):
     # forbid asymmetric noise for non-cifar datasets
     if config.NOISE_TYPE == "asymmetric" and config.DATASET != "cifar10":
-        raise ValueError(
-            "Asymmetric noise mapping is implemented only for CIFAR-10. "
-            "Set NOISE_TYPE='symmetric' or 'heterogeneous' for this dataset."
+        raise ValueError("Asymmetric noise only supported for CIFAR-10"
         )
 
     if config.NOISE_TYPE == "symmetric":
@@ -101,16 +92,12 @@ def apply_noise(dataset, indices, config, client_id):
     else:
         raise ValueError(f"Unknown NOISE_TYPE: {config.NOISE_TYPE}")
 
-
-# =========================
 # Data
-# =========================
 
 def load_data(config):
 
-    # =========================
     # EMNIST
-    # =========================
+
     if config.DATASET == "emnist":
 
         def emnist_fix(x):
@@ -148,17 +135,16 @@ def load_data(config):
 
         proxy_base = full_train
 
-    # =========================
     # APTOS (Medical)
-    # =========================
+
     elif config.DATASET == "aptos":
         from data.aptos_loader import load_aptos_raw
         train_dataset, test_dataset = load_aptos_raw(config)
         proxy_base = train_dataset
 
-    # =========================
+
     # CIFAR10
-    # =========================
+
     elif config.DATASET == "cifar10":
 
         transform = transforms.ToTensor()
@@ -182,9 +168,9 @@ def load_data(config):
     else:
         raise ValueError(f"Unknown dataset: {config.DATASET}")
 
-    # =========================
+
     # Proxy dataset creation
-    # =========================
+
     proxy_dataset = None
 
     if getattr(config, "PROXY_SIZE", 0) > 0:
@@ -199,9 +185,7 @@ def load_data(config):
     return train_dataset, test_dataset, proxy_dataset
 
 
-# =========================
 # Clients
-# =========================
 
 from torch.utils.data import Subset, DataLoader
 import numpy as np
@@ -263,9 +247,8 @@ def create_clients(train_dataset, config, model_factory):
     return clients
 
 
-# =========================
 # Evaluation
-# =========================
+
 
 def evaluate_global(model, test_dataset, config):
     """
@@ -331,9 +314,7 @@ def evaluate_per_client(server_model, clients, config):
     return worst_acc
 
 
-# =========================
 # Main
-# =========================
 
 def main():
 
@@ -380,9 +361,8 @@ def main():
     print(f"NOISE_TYPE={config.NOISE_TYPE}")
     print("==============")
 
-    # =========================
     # Load data
-    # =========================
+
     train_dataset, test_dataset, proxy_dataset = load_data(config)
     print("Train size after load_data:", len(train_dataset))
 
@@ -393,16 +373,15 @@ def main():
 
     log_path = f"{config.DATASET}_noise_{int(config.NOISE_RATE*100)}.csv"
 
-    # =========================
     # Training loop
-    # =========================
+
     with open(log_path, "w", newline="", encoding="utf-8") as f:
 
         writer = csv.writer(f)
         writer.writerow([
             "round",
             "global_accuracy",
-            "macro_f1",                 # NEW
+            "macro_f1",                 
             "worst_client_accuracy",
             "round_time_sec",
             "num_selected_clients"
@@ -465,14 +444,11 @@ def main():
             writer.writerow([
                 r + 1,
                 f"{global_acc:.6f}",
-                f"{macro_f1_val:.6f}",     # NEW
+                f"{macro_f1_val:.6f}",     
                 f"{worst_acc:.6f}",
                 f"{dt:.3f}",
                 m
             ])
-
-    print(f"Done. Log saved to: {log_path}")
-
 
 if __name__ == "__main__":
     main()
