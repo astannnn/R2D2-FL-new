@@ -3,16 +3,22 @@
 ## Project Structure
 
 ```
-main.py              # Main training script
-config.py            # Hyperparameter configuration
-
-core/                # Core FL implementation
-├── client.py
-├── server.py
-├── reliability.py
-├── distillation.py
-├── partition.py
-└── models.py
+.
+├── main.py # Main training script
+├── config.py # Hyperparameter configuration
+├── README.md
+├── technical_report.md
+│
+├── core/ # Core Federated Learning logic
+│ ├── init.py
+│ ├── client.py # Client-side local training (FedAvg, FedProx, R2D2)
+│ ├── server.py # Server aggregation and distillation logic
+│ ├── partition.py # Dirichlet data partitioning
+│ ├── models.py # Model architectures
+│ └── femnist_leaf.py # FEMNIST loader utilities
+│
+└── data/
+└── aptos_loader.py # APTOS medical dataset loader
 ```
 
 ---
