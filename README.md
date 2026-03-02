@@ -15,8 +15,6 @@
 │ ├── server.py # Server aggregation and distillation logic
 │ ├── partition.py # Dirichlet data partitioning
 │ ├── models.py # Model architectures
-│ └── femnist_leaf.py # FEMNIST loader utilities
-│
 └── data/
 └── aptos_loader.py # APTOS medical dataset loader
 ```
