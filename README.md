@@ -36,15 +36,79 @@ pip install torch torchvision numpy tqdm matplotlib
 
 ## Supported Datasets
 
-Currently implemented:
+CIFAR-10
 
-- CIFAR-10  
-- EMNIST  
-- APTOS 2019 (Medical Dataset)
+Automatically downloaded via torchvision.
 
-CIFAR-10 and EMNIST are automatically downloaded via `torchvision`.
+EMNIST (Digits split)
 
-APTOS requires manual dataset preparation.
+Automatically downloaded via torchvision.
+
+APTOS 2019 (Medical Retinopathy Dataset)
+
+If the dataset is not found locally, a small synthetic fallback dataset is automatically generated to verify that the training pipeline runs correctly.
+
+To run full APTOS experiments:
+
+Download the dataset from Kaggle:
+https://www.kaggle.com/competitions/aptos2019-blindness-detection
+
+Extract training images into:
+
+data/aptos/train/
+
+Folder structure must be:
+
+data/aptos/train/
+ ├── 0/
+ ├── 1/
+ ├── 2/
+ ├── 3/
+ └── 4/
+
+Each folder should contain images belonging to that class.
+
+Configuration
+
+All hyperparameters are defined in config.py.
+
+The configuration system includes:
+
+BaseConfig – shared parameters
+
+CIFARConfig
+
+EMNISTConfig
+
+APTOSConfig
+
+Key parameters:
+
+NUM_CLIENTS
+
+CLIENT_FRACTION
+
+LOCAL_EPOCHS
+
+ROUNDS
+
+LR
+
+DIRICHLET_ALPHA
+
+NOISE_RATE
+
+NOISE_TYPE
+
+PROXY_SIZE
+
+USE_R2D2
+
+USE_FEDPROX
+
+SEED
+
+To switch datasets, modify the dataset selection inside main.py.
 
 ---
 
