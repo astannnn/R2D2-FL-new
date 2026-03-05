@@ -51,7 +51,7 @@ class CIFARConfig(BaseConfig):
     NUM_CLIENTS = 8
     CLIENT_FRACTION = 0.75
     LOCAL_EPOCHS = 2
-    ROUNDS = 15
+    ROUNDS = 30
     BATCH_SIZE = 128
     LR = 0.01
 
