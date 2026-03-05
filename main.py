@@ -405,5 +405,8 @@ def main(config=None):
         )
 
 
+from config import CIFARConfig # CIFARConfig / EMNISTConfig / APTOSConfig
+
 if __name__ == "__main__":
-    main()
+    config = CIFARConfig()  # CIFARConfig() / EMNISTConfig() / APTOSConfig()
+    main(config)
