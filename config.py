@@ -17,19 +17,19 @@ class BaseConfig:
     DIRICHLET_ALPHA = 0.3
 
     # ================= R2D2 =================
-    USE_R2D2 = False
+    USE_R2D2 = True
     TEMPERATURE = 2.0
-    BETA = 0.1
+    BETA = 0.3
     LAMBDA = 0.7
-    CONF_THRESHOLD = 0.6
+    CONF_THRESHOLD = 0.7
 
     # ================= Reliability =================
-    USE_RELIABILITY = False
-    USE_CLASS_RELIABILITY = False
+    USE_RELIABILITY = True
+    USE_CLASS_RELIABILITY = True
 
     # ================= Ablation switches =================
-    USE_SOFT_CORRECTION = False
-    USE_LOCAL_KD = False
+    USE_SOFT_CORRECTION = True
+    USE_LOCAL_KD = True
 
     # ================= FedProx =================
     USE_FEDPROX = False
@@ -61,7 +61,7 @@ class CIFARConfig(BaseConfig):
     NOISE_TYPE = "symmetric"
 
     # Proxy
-    PROXY_SIZE = 400
+    PROXY_SIZE = 1000
 
 
 # =====================================================
