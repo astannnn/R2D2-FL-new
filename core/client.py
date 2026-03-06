@@ -33,13 +33,17 @@ class Client:
                 optimizer.zero_grad()
                 logits = self.model(x)
 
-                # 1️ FedAvg (no global model)
+                # =====================================================
+                # 1. FedAvg (no global model)
+                # =====================================================
                 if global_model is None:
                     loss = F.cross_entropy(logits, y)
 
                 else:
 
-                    # 2️ FedProx
+                    # =====================================================
+                    # 2. FedProx
+                    # =====================================================
                     if getattr(self.config, "USE_FEDPROX", False) and not self.config.USE_R2D2:
 
                         ce_loss = F.cross_entropy(logits, y)
@@ -53,11 +57,13 @@ class Client:
 
                         loss = ce_loss + 0.5 * self.config.MU * prox_loss
 
-                    # 3️ R2D2
+                    # =====================================================
+                    # 3. R2D2
+                    # =====================================================
                     elif self.config.USE_R2D2:
 
                         with torch.no_grad():
-                            teacher_logits = global_model(x)
+                            teacher_logits = global_model(x).detach()
                             teacher_probs = F.softmax(
                                 teacher_logits / self.config.TEMPERATURE,
                                 dim=1
@@ -67,18 +73,28 @@ class Client:
                         conf, _ = torch.max(probs, dim=1)
 
                         mask = conf > self.config.CONF_THRESHOLD
-                        y_onehot = F.one_hot(y, num_classes=self.config.NUM_CLASSES).float()
+
+                        y_onehot = F.one_hot(
+                            y,
+                            num_classes=self.config.NUM_CLASSES
+                        ).float()
+
+                        hard_loss = torch.zeros(1, device=device)
+                        soft_loss = torch.zeros(1, device=device)
+
+                        hard_count = mask.sum()
+                        soft_count = (~mask).sum()
+
                         # Hard samples
-                        if mask.sum() > 0:
+                        if hard_count > 0:
                             hard_loss = F.cross_entropy(
                                 logits[mask],
-                                y[mask]
+                                y[mask],
+                                reduction="sum"
                             )
-                        else:
-                            hard_loss = torch.tensor(0.0, device=device)
 
                         # Suspicious samples
-                        if (~mask).sum() > 0:
+                        if soft_count > 0:
 
                             if getattr(self.config, "USE_SOFT_CORRECTION", True):
 
@@ -90,20 +106,26 @@ class Client:
                                 ce_soft = -(soft_labels *
                                             F.log_softmax(logits[~mask], dim=1)).sum(dim=1)
 
-                                soft_loss = ce_soft.mean()
+                                soft_loss = ce_soft.sum()
 
                             else:
+
                                 soft_loss = F.cross_entropy(
                                     logits[~mask],
-                                    y[~mask]
+                                    y[~mask],
+                                    reduction="sum"
                                 )
 
+                        total = hard_count + soft_count
+
+                        if total > 0:
+                            sup_loss = (hard_loss + soft_loss) / total
                         else:
-                            soft_loss = torch.tensor(0.0, device=device)
+                            sup_loss = torch.zeros(1, device=device)
 
-                        sup_loss = hard_loss + soft_loss
-
-                        # Local KD 
+                        # =====================================================
+                        # Local KD
+                        # =====================================================
                         if getattr(self.config, "USE_LOCAL_KD", True):
 
                             kd_loss = F.kl_div(
@@ -120,7 +142,9 @@ class Client:
                         else:
                             loss = sup_loss
 
-                    # 4️ Plain FedAvg fallback
+                    # =====================================================
+                    # 4. Plain FedAvg fallback
+                    # =====================================================
                     else:
                         loss = F.cross_entropy(logits, y)
 
