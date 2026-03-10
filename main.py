@@ -342,10 +342,21 @@ def main(config=None):
             client_weights.append(w)
             client_sizes.append(len(client.train_loader.dataset))
 
-        server.aggregate(client_weights, client_sizes)
+        if config.USE_FEDDF and proxy_dataset is not None:
+            server.distill(
+                [c.model for c in selected_clients],
+                proxy_dataset,
+                config
+            )
+        else:
+            server.aggregate(client_weights, client_sizes)
 
-        if config.USE_R2D2 and proxy_dataset is not None:
-            server.distill([c.model for c in selected_clients], proxy_dataset, config)
+            if config.USE_R2D2 and proxy_dataset is not None:
+                server.distill(
+                    [c.model for c in selected_clients],
+                    proxy_dataset,
+                    config
+                )
 
         global_acc, macro_f1_val = evaluate_global(server.global_model, test_dataset, config)
         worst_acc = evaluate_per_client(server.global_model, clients, config)
