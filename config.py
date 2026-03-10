@@ -7,6 +7,7 @@ import torch
 
 class BaseConfig:
 
+    DISTILL_LR = 0.001
     # Reproducibility
     SEED = 1
 
@@ -59,8 +60,8 @@ class CIFARConfig(BaseConfig):
 
     # Noise
     NOISE_CLIENT_RATIO = 0.5
-    NOISE_RATE = 0.2
-    NOISE_TYPE = "symmetric"
+    NOISE_RATE = 0.4
+    NOISE_TYPE = "heterogeneous"
 
     # Proxy
     PROXY_SIZE = 1000
