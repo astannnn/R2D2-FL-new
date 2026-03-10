@@ -30,7 +30,7 @@ class Server:
         self.global_model.load_state_dict(new_weights)
 
     # =====================================================
-    # R2D2 Proxy Distillation
+    # Proxy Distillation
     # =====================================================
 
     def distill(self, client_models, proxy_dataset, config, print_stats=True):
@@ -44,7 +44,6 @@ class Server:
         loader = DataLoader(proxy_dataset, batch_size=128, shuffle=False)
 
         num_clients = len(client_models)
-
         if num_clients == 0:
             return
 
@@ -56,7 +55,6 @@ class Server:
         # =====================================================
 
         total_samples = 0
-
         agreement_total = torch.zeros(num_clients, device=device)
 
         num_classes = None
@@ -64,25 +62,20 @@ class Server:
         total_by_class = None
 
         with torch.no_grad():
-
             for x, _ in loader:
-
                 x = x.to(device)
 
                 preds_list = []
 
                 for m in client_models:
-
                     logits = m(x)
 
                     if num_classes is None:
-
                         num_classes = logits.size(1)
 
                         agree_by_class = torch.zeros(
                             (num_clients, num_classes), device=device
                         )
-
                         total_by_class = torch.zeros(
                             num_classes, device=device
                         )
@@ -90,7 +83,6 @@ class Server:
                     preds_list.append(torch.argmax(logits, dim=1))
 
                 preds = torch.stack(preds_list, dim=0)
-
                 maj, _ = torch.mode(preds, dim=0)
 
                 B = x.size(0)
@@ -100,7 +92,6 @@ class Server:
                     agreement_total[k] += (preds[k] == maj).sum()
 
                 for c in range(num_classes):
-
                     mask = maj == c
                     cnt = mask.sum()
 
@@ -119,7 +110,6 @@ class Server:
         r_kc = torch.zeros((num_clients, num_classes), device=device)
 
         for c in range(num_classes):
-
             denom = float(total_by_class[c].item())
 
             if denom <= 0:
@@ -141,15 +131,14 @@ class Server:
 
         optimizer = torch.optim.SGD(
             self.global_model.parameters(),
-            lr=config.LR,
+            lr=getattr(config, "DISTILL_LR", 0.001),
             momentum=0.9
         )
 
-        logC = math.log(num_classes)
         eps = 1e-12
+        logC = math.log(num_classes)
 
         for x, _ in loader:
-
             x = x.to(device)
 
             logits_list = []
@@ -157,11 +146,8 @@ class Server:
             preds_list = []
 
             with torch.no_grad():
-
                 for m in client_models:
-
                     z = m(x)
-
                     p = F.softmax(z, dim=1)
 
                     logits_list.append(z)
@@ -169,13 +155,7 @@ class Server:
                     preds_list.append(torch.argmax(z, dim=1))
 
                 preds = torch.stack(preds_list, dim=0)
-
                 maj, _ = torch.mode(preds, dim=0)
-
-            teacher_logits = torch.zeros(
-                (x.size(0), num_classes),
-                device=device
-            )
 
             alphas = torch.zeros(
                 (num_clients, x.size(0)),
@@ -183,47 +163,37 @@ class Server:
             )
 
             for k in range(num_clients):
-
-                z_k = logits_list[k]
                 p_k = probs_list[k]
 
                 ent = -(p_k * torch.log(p_k + eps)).sum(dim=1)
-
                 ent_norm = torch.clamp(ent / logC, 0.0, 1.0)
 
                 if getattr(config, "USE_RELIABILITY", True):
-
                     if getattr(config, "USE_CLASS_RELIABILITY", True):
                         class_gate = rkc[k, maj]
                     else:
                         class_gate = 1.0
 
                     alphas[k] = rk[k] * class_gate * (1.0 - ent_norm)
-
                 else:
                     alphas[k] = torch.ones_like(ent_norm)
 
             alpha_sum = alphas.sum(dim=0).clamp_min(1e-12)
-
             alphas = alphas / alpha_sum.unsqueeze(0)
 
-            for k in range(num_clients):
+            teacher_probs = torch.zeros(
+                (x.size(0), num_classes),
+                device=device
+            )
 
-                teacher_logits += (
-                    alphas[k].unsqueeze(1) * logits_list[k]
-                )
+            for k in range(num_clients):
+                p_k = F.softmax(logits_list[k] / temperature, dim=1)
+                teacher_probs += alphas[k].unsqueeze(1) * p_k
+
+            teacher_probs = teacher_probs.clamp_min(1e-12)
+            teacher_probs = teacher_probs / teacher_probs.sum(dim=1, keepdim=True)
 
             student_logits = self.global_model(x)
-
-            p_teacher = F.softmax(
-                teacher_logits / temperature,
-                dim=1
-            ).clamp_min(1e-12)
-
-            p_teacher = p_teacher / p_teacher.sum(
-                dim=1,
-                keepdim=True
-            )
 
             logp_student = F.log_softmax(
                 student_logits / temperature,
@@ -232,7 +202,7 @@ class Server:
 
             loss_kd = F.kl_div(
                 logp_student,
-                p_teacher,
+                teacher_probs,
                 reduction="batchmean"
             ) * (temperature ** 2)
 
