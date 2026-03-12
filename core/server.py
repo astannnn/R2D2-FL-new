@@ -30,7 +30,7 @@ class Server:
         self.global_model.load_state_dict(new_weights)
 
     # =====================================================
-    # Proxy Distillation
+    # Proxy Distillation (FedDF / R2D2 path)
     # =====================================================
 
     def distill(self, client_models, proxy_dataset, config, print_stats=True):
@@ -211,3 +211,41 @@ class Server:
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+    # =====================================================
+    # Selective-FD: build filtered teacher on proxy
+    # =====================================================
+    def build_selective_teacher(self, client_probs_list, client_masks_list, config):
+
+        if len(client_probs_list) == 0:
+            return None, None
+
+        probs = torch.stack(client_probs_list, dim=0)   # [K, N, C]
+        masks = torch.stack(client_masks_list, dim=0)   # [K, N]
+
+        K, N, C = probs.shape
+
+        ensemble = torch.zeros((N, C), dtype=probs.dtype)
+        valid_counts = masks.sum(dim=0)  # [N]
+
+        for k in range(K):
+            ensemble += probs[k] * masks[k].unsqueeze(1).float()
+
+        nonzero = valid_counts > 0
+        if nonzero.sum().item() == 0:
+            return None, None
+
+        ensemble[nonzero] = ensemble[nonzero] / valid_counts[nonzero].unsqueeze(1).float()
+
+        hard_idx = torch.argmax(ensemble, dim=1)
+        one_hot = F.one_hot(hard_idx, num_classes=C).float()
+
+        l1_dist = torch.abs(ensemble - one_hot).sum(dim=1)
+
+        tau_server = getattr(config, "SELECTIVE_TAU_SERVER", 0.80)
+        valid_mask = nonzero & (l1_dist <= tau_server)
+
+        ensemble = ensemble.clamp_min(1e-12)
+        ensemble = ensemble / ensemble.sum(dim=1, keepdim=True)
+
+        return ensemble.cpu(), valid_mask.cpu()
