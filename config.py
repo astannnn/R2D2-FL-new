@@ -8,6 +8,7 @@ import torch
 class BaseConfig:
 
     DISTILL_LR = 0.001
+
     # Reproducibility
     SEED = 1
 
@@ -17,14 +18,17 @@ class BaseConfig:
     # Dirichlet partition
     DIRICHLET_ALPHA = 0.3
 
-    # ================= R2D2 =================
+    # ================= Method switches =================
     USE_R2D2 = False
+    USE_FEDDF = False
+    USE_FEDPROX = False
+    USE_SELECTIVE_FD = True
+
+    # ================= R2D2 =================
     TEMPERATURE = 2.0
     BETA = 0.3
     LAMBDA = 0.7
     CONF_THRESHOLD = 0.7
-
-    USE_FEDDF = True
 
     # ================= Reliability =================
     USE_RELIABILITY = False
@@ -35,8 +39,15 @@ class BaseConfig:
     USE_LOCAL_KD = False
 
     # ================= FedProx =================
-    USE_FEDPROX = False
     MU = 0.01
+
+    # ================= Selective-FD =================
+    SELECTIVE_TAU_CLIENT = 0.60      # confidence threshold on client side
+    SELECTIVE_TAU_SERVER = 0.80      # L1 ambiguity threshold on server side
+    SELECTIVE_KD_WEIGHT = 1.0
+    SELECTIVE_USE_SOFT = True
+    PROXY_BATCH_SIZE = 128
+    SELECTIVE_DISTILL_EPOCHS = 1
 
 
 # =====================================================
