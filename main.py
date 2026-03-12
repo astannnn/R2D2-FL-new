@@ -121,7 +121,7 @@ def load_data(config):
             transform=transform
         )
 
-        proxy_base = full_train  # keep proxy stable
+        proxy_base = full_train
 
     elif config.DATASET == "aptos":
 
@@ -147,7 +147,7 @@ def load_data(config):
             transform=transform
         )
 
-        proxy_base = train_dataset  # keep proxy stable
+        proxy_base = train_dataset
 
     else:
         raise ValueError(f"Unknown dataset: {config.DATASET}")
@@ -167,7 +167,6 @@ def load_data(config):
 
 def create_clients(train_dataset, config, model_factory):
 
-    # targets extraction
     if isinstance(train_dataset, Subset):
         base_ds = train_dataset.dataset
         base_idxs = np.array(train_dataset.indices)
@@ -201,8 +200,6 @@ def create_clients(train_dataset, config, model_factory):
         else:
             idx_base = idx_local
 
-        # IMPORTANT: noise is applied only to the base dataset indices for this client
-        # (this mutates base_ds.targets; keep proxy fixed by sampling proxy BEFORE this)
         if i < num_noisy_clients and config.NOISE_RATE > 0:
             apply_noise(base_ds, idx_base, config, i)
 
@@ -282,6 +279,35 @@ def evaluate_per_client(server_model, clients, config):
 
 
 # =========================
+# Selective-FD Round
+# =========================
+
+def selective_fd_step(selected_clients, server, proxy_dataset, config):
+    if proxy_dataset is None or len(selected_clients) == 0:
+        return
+
+    client_probs_list = []
+    client_masks_list = []
+
+    for client in selected_clients:
+        probs, mask = client.get_proxy_predictions(proxy_dataset)
+        client_probs_list.append(probs)
+        client_masks_list.append(mask)
+
+    teacher_probs, valid_mask = server.build_selective_teacher(
+        client_probs_list,
+        client_masks_list,
+        config
+    )
+
+    if teacher_probs is None or valid_mask is None:
+        return
+
+    for client in selected_clients:
+        client.distill_on_proxy(proxy_dataset, teacher_probs, valid_mask)
+
+
+# =========================
 # Main
 # =========================
 
@@ -314,6 +340,10 @@ def main(config=None):
     print(f"DIRICHLET_ALPHA={config.DIRICHLET_ALPHA}")
     print(f"NOISE_RATE={config.NOISE_RATE}")
     print(f"NOISE_TYPE={config.NOISE_TYPE}")
+    print(f"USE_FEDPROX={config.USE_FEDPROX}")
+    print(f"USE_FEDDF={config.USE_FEDDF}")
+    print(f"USE_R2D2={config.USE_R2D2}")
+    print(f"USE_SELECTIVE_FD={getattr(config, 'USE_SELECTIVE_FD', False)}")
     print("==============")
 
     train_dataset, test_dataset, proxy_dataset = load_data(config)
@@ -326,7 +356,6 @@ def main(config=None):
 
     for r in range(config.ROUNDS):
 
-        # Sample from ACTIVE clients, not NUM_CLIENTS
         m = max(1, int(config.CLIENT_FRACTION * len(clients)))
         selected_clients = random.sample(clients, m)
 
@@ -334,9 +363,7 @@ def main(config=None):
         client_sizes = []
 
         for client in selected_clients:
-
             client.model.load_state_dict(server.global_model.state_dict())
-
             w = client.local_train(global_model=server.global_model)
 
             client_weights.append(w)
@@ -344,7 +371,16 @@ def main(config=None):
 
         server.aggregate(client_weights, client_sizes)
 
-        if (config.USE_FEDDF or config.USE_R2D2) and proxy_dataset is not None:
+        # -------------------------
+        # Selective-FD path
+        # -------------------------
+        if getattr(config, "USE_SELECTIVE_FD", False) and proxy_dataset is not None:
+            selective_fd_step(selected_clients, server, proxy_dataset, config)
+
+        # -------------------------
+        # Existing FedDF / R2D2 path
+        # -------------------------
+        elif (config.USE_FEDDF or config.USE_R2D2) and proxy_dataset is not None:
             server.distill(
                 [c.model for c in selected_clients],
                 proxy_dataset,
@@ -366,4 +402,10 @@ from config import CIFARConfig  # CIFARConfig / EMNISTConfig / APTOSConfig
 
 if __name__ == "__main__":
     config = CIFARConfig()
+
+    # examples:
+    # config.USE_FEDDF = True
+    # config.USE_R2D2 = True
+    # config.USE_SELECTIVE_FD = True
+
     main(config)
