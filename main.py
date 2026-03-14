@@ -22,6 +22,19 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
 
 
+def validate_single_baseline(config):
+    active_methods = [
+        getattr(config, "USE_FEDPROX", False),
+        getattr(config, "USE_FEDDF", False),
+        getattr(config, "USE_R2D2", False),
+        getattr(config, "USE_SELECTIVE_FD", False),
+        getattr(config, "USE_FEDNORO", False),
+    ]
+
+    if sum(active_methods) > 1:
+        raise ValueError("Only one baseline method can be active at a time.")
+
+
 # =========================
 # Noise
 # =========================
@@ -313,6 +326,8 @@ def selective_fd_step(selected_clients, server, proxy_dataset, config):
 
 def main(config=None):
 
+    validate_single_baseline(config)
+
     print("DATASET =", config.DATASET)
     set_seed(config.SEED)
 
@@ -344,6 +359,7 @@ def main(config=None):
     print(f"USE_FEDDF={config.USE_FEDDF}")
     print(f"USE_R2D2={config.USE_R2D2}")
     print(f"USE_SELECTIVE_FD={getattr(config, 'USE_SELECTIVE_FD', False)}")
+    print(f"USE_FEDNORO={getattr(config, 'USE_FEDNORO', False)}")
     print("==============")
 
     train_dataset, test_dataset, proxy_dataset = load_data(config)
@@ -364,7 +380,7 @@ def main(config=None):
 
         for client in selected_clients:
             client.model.load_state_dict(server.global_model.state_dict())
-            w = client.local_train(global_model=server.global_model)
+            w = client.local_train(global_model=server.global_model, round_idx=r)
 
             client_weights.append(w)
             client_sizes.append(len(client.train_loader.dataset))
@@ -404,8 +420,10 @@ if __name__ == "__main__":
     config = CIFARConfig()
 
     # examples:
+    # config.USE_FEDPROX = True
     # config.USE_FEDDF = True
     # config.USE_R2D2 = True
     # config.USE_SELECTIVE_FD = True
+    # config.USE_FEDNORO = True
 
     main(config)
