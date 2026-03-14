@@ -226,7 +226,7 @@ class Server:
         K, N, C = probs.shape
 
         ensemble = torch.zeros((N, C), dtype=probs.dtype)
-        valid_counts = masks.sum(dim=0)  # [N]
+        valid_counts = masks.sum(dim=0)
 
         for k in range(K):
             ensemble += probs[k] * masks[k].unsqueeze(1).float()
