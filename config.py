@@ -22,7 +22,8 @@ class BaseConfig:
     USE_R2D2 = False
     USE_FEDDF = False
     USE_FEDPROX = False
-    USE_SELECTIVE_FD = True
+    USE_SELECTIVE_FD = False
+    USE_FEDNORO = False
 
     # ================= R2D2 =================
     TEMPERATURE = 2.0
@@ -42,12 +43,21 @@ class BaseConfig:
     MU = 0.01
 
     # ================= Selective-FD =================
-    SELECTIVE_TAU_CLIENT = 0.60      # confidence threshold on client side
-    SELECTIVE_TAU_SERVER = 0.80      # L1 ambiguity threshold on server side
+    SELECTIVE_TAU_CLIENT = 0.60
+    SELECTIVE_TAU_SERVER = 0.80
     SELECTIVE_KD_WEIGHT = 1.0
     SELECTIVE_USE_SOFT = True
     PROXY_BATCH_SIZE = 128
     SELECTIVE_DISTILL_EPOCHS = 1
+
+    # ================= FedNoRo =================
+    FEDNORO_WARMUP_ROUNDS = 5
+    FEDNORO_LABEL_CORRECTION_START = 8
+    FEDNORO_CONF_THRESHOLD = 0.90
+    FEDNORO_SOFT_WEIGHT = 0.7
+    FEDNORO_USE_SOFT = True
+    FEDNORO_KD_WEIGHT = 0.0
+    FEDNORO_SUSPICIOUS_WEIGHT = 0.5
 
 
 # =====================================================
@@ -71,8 +81,8 @@ class CIFARConfig(BaseConfig):
 
     # Noise
     NOISE_CLIENT_RATIO = 0.5
-    NOISE_RATE = 0.4
-    NOISE_TYPE = "heterogeneous"
+    NOISE_RATE = 0.0
+    NOISE_TYPE = "symmetric"
 
     # Proxy
     PROXY_SIZE = 1000
