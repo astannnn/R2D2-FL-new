@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -11,7 +12,7 @@ class Client:
         self.train_loader = train_loader
         self.config = config
 
-    def local_train(self, global_model=None):
+    def local_train(self, global_model=None, round_idx=0):
 
         device = self.config.DEVICE
         self.model.train()
@@ -58,7 +59,110 @@ class Client:
                         loss = ce_loss + 0.5 * self.config.MU * prox_loss
 
                     # =====================================================
-                    # 3. R2D2
+                    # 3. FedNoRo
+                    # =====================================================
+                    elif getattr(self.config, "USE_FEDNORO", False):
+
+                        warmup_rounds = getattr(self.config, "FEDNORO_WARMUP_ROUNDS", 5)
+                        correction_start = getattr(
+                            self.config,
+                            "FEDNORO_LABEL_CORRECTION_START",
+                            warmup_rounds
+                        )
+                        conf_threshold = getattr(self.config, "FEDNORO_CONF_THRESHOLD", 0.8)
+                        soft_weight = getattr(self.config, "FEDNORO_SOFT_WEIGHT", 0.5)
+                        use_soft = getattr(self.config, "FEDNORO_USE_SOFT", True)
+                        kd_weight = getattr(self.config, "FEDNORO_KD_WEIGHT", 0.0)
+                        suspicious_weight = getattr(
+                            self.config,
+                            "FEDNORO_SUSPICIOUS_WEIGHT",
+                            0.5
+                        )
+                        temperature = getattr(self.config, "TEMPERATURE", 2.0)
+
+                        # warm-up stage
+                        if round_idx < warmup_rounds:
+                            loss = F.cross_entropy(logits, y)
+
+                        else:
+                            with torch.no_grad():
+                                teacher_logits = global_model(x).detach()
+                                teacher_probs = F.softmax(
+                                    teacher_logits / temperature,
+                                    dim=1
+                                )
+                                teacher_conf, teacher_pred = torch.max(teacher_probs, dim=1)
+
+                            y_onehot = F.one_hot(
+                                y,
+                                num_classes=self.config.NUM_CLASSES
+                            ).float()
+
+                            clean_mask = (teacher_pred == y) | (teacher_conf < conf_threshold)
+                            suspicious_mask = ~clean_mask
+
+                            clean_loss = torch.zeros(1, device=device)
+                            suspicious_loss = torch.zeros(1, device=device)
+
+                            clean_count = clean_mask.sum()
+                            suspicious_count = suspicious_mask.sum()
+
+                            if clean_count > 0:
+                                clean_loss = F.cross_entropy(
+                                    logits[clean_mask],
+                                    y[clean_mask],
+                                    reduction="sum"
+                                )
+
+                            if suspicious_count > 0:
+                                if round_idx >= correction_start:
+                                    if use_soft:
+                                        corrected_targets = (
+                                            soft_weight * y_onehot[suspicious_mask]
+                                            + (1.0 - soft_weight) * teacher_probs[suspicious_mask]
+                                        )
+
+                                        ce_soft = -(
+                                            corrected_targets *
+                                            F.log_softmax(logits[suspicious_mask], dim=1)
+                                        ).sum(dim=1)
+
+                                        suspicious_loss = ce_soft.sum()
+                                    else:
+                                        suspicious_loss = F.cross_entropy(
+                                            logits[suspicious_mask],
+                                            teacher_pred[suspicious_mask],
+                                            reduction="sum"
+                                        )
+                                else:
+                                    suspicious_loss = suspicious_weight * F.cross_entropy(
+                                        logits[suspicious_mask],
+                                        y[suspicious_mask],
+                                        reduction="sum"
+                                    )
+
+                            total = clean_count + suspicious_count
+                            if total > 0:
+                                sup_loss = (clean_loss + suspicious_loss) / total
+                            else:
+                                sup_loss = torch.zeros(1, device=device)
+
+                            if kd_weight > 0:
+                                kd_loss = F.kl_div(
+                                    F.log_softmax(
+                                        logits / temperature,
+                                        dim=1
+                                    ),
+                                    teacher_probs,
+                                    reduction="batchmean"
+                                ) * (temperature ** 2)
+
+                                loss = sup_loss + kd_weight * kd_loss
+                            else:
+                                loss = sup_loss
+
+                    # =====================================================
+                    # 4. R2D2
                     # =====================================================
                     elif getattr(self.config, "USE_R2D2", False):
 
@@ -99,8 +203,10 @@ class Client:
                                     + (1 - self.config.LAMBDA) * teacher_probs[~mask]
                                 )
 
-                                ce_soft = -(soft_labels *
-                                            F.log_softmax(logits[~mask], dim=1)).sum(dim=1)
+                                ce_soft = -(
+                                    soft_labels *
+                                    F.log_softmax(logits[~mask], dim=1)
+                                ).sum(dim=1)
 
                                 soft_loss = ce_soft.sum()
                             else:
@@ -132,7 +238,7 @@ class Client:
                             loss = sup_loss
 
                     # =====================================================
-                    # 4. Plain FedAvg fallback
+                    # 5. Plain FedAvg fallback
                     # =====================================================
                     else:
                         loss = F.cross_entropy(logits, y)
@@ -140,7 +246,7 @@ class Client:
                 loss.backward()
                 optimizer.step()
 
-        return self.model.state_dict()
+        return copy.deepcopy(self.model.state_dict())
 
     # =====================================================
     # Selective-FD: client-side proxy prediction
