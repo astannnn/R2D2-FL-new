@@ -104,13 +104,13 @@ class EMNISTConfig(BaseConfig):
     NUM_CLIENTS = 8
     CLIENT_FRACTION = 0.75
     LOCAL_EPOCHS = 2
-    ROUNDS = 30
+    ROUNDS = 20
     BATCH_SIZE = 64
     LR = 0.005
 
     # Noise
     NOISE_CLIENT_RATIO = 0.5
-    NOISE_RATE = 0.4
+    NOISE_RATE = 0.0
     NOISE_TYPE = "symmetric"
 
     # Proxy
