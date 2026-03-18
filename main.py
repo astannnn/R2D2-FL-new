@@ -53,10 +53,26 @@ def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
     dataset.targets = targets.tolist()
 
 
-def inject_asymmetric_noise(dataset, indices, noise_rate):
+def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
     targets = np.array(dataset.targets)
 
-    mapping = {8: 0, 9: 1, 3: 5, 4: 7}
+    if dataset_name == "cifar10":
+        mapping = {8: 0, 9: 1, 3: 5, 4: 7}
+
+    elif dataset_name == "emnist":
+        # EMNIST digits: visually similar confusions
+        mapping = {
+            1: 7,
+            7: 1,
+            3: 8,
+            8: 3,
+            5: 6,
+            6: 5,
+        }
+
+    else:
+        raise ValueError(f"Asymmetric noise not supported for dataset: {dataset_name}")
+
     candidates = [idx for idx in indices if targets[idx] in mapping]
     if len(candidates) == 0:
         return
@@ -73,14 +89,14 @@ def inject_asymmetric_noise(dataset, indices, noise_rate):
 
 def apply_noise(dataset, indices, config, client_id):
 
-    if config.NOISE_TYPE == "asymmetric" and config.DATASET != "cifar10":
-        raise ValueError("Asymmetric noise only supported for CIFAR-10")
+    if config.NOISE_TYPE == "asymmetric" and config.DATASET not in ["cifar10", "emnist"]:
+        raise ValueError("Asymmetric noise only supported for CIFAR-10 and EMNIST")
 
     if config.NOISE_TYPE == "symmetric":
         inject_symmetric_noise(dataset, indices, config.NOISE_RATE, config.NUM_CLASSES)
 
     elif config.NOISE_TYPE == "asymmetric":
-        inject_asymmetric_noise(dataset, indices, config.NOISE_RATE)
+        inject_asymmetric_noise(dataset, indices, config.NOISE_RATE, config.DATASET)
 
     elif config.NOISE_TYPE == "heterogeneous":
         if config.NUM_CLIENTS == 1:
