@@ -70,6 +70,23 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
             6: 5,
         }
 
+    elif dataset_name == "aptos":
+        # APTOS severity is ordinal, so asymmetric noise should mostly
+        # confuse neighboring grades rather than random distant classes.
+        #
+        # 0 -> 1
+        # 1 -> 2
+        # 2 -> 3
+        # 3 -> 4
+        # 4 -> 3
+        mapping = {
+            0: 1,
+            1: 2,
+            2: 3,
+            3: 4,
+            4: 3,
+        }
+
     else:
         raise ValueError(f"Asymmetric noise not supported for dataset: {dataset_name}")
 
@@ -89,8 +106,8 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
 
 def apply_noise(dataset, indices, config, client_id):
 
-    if config.NOISE_TYPE == "asymmetric" and config.DATASET not in ["cifar10", "emnist"]:
-        raise ValueError("Asymmetric noise only supported for CIFAR-10 and EMNIST")
+    if config.NOISE_TYPE == "asymmetric" and config.DATASET not in ["cifar10", "emnist", "aptos"]:
+        raise ValueError("Asymmetric noise only supported for CIFAR-10, EMNIST and APTOS")
 
     if config.NOISE_TYPE == "symmetric":
         inject_symmetric_noise(dataset, indices, config.NOISE_RATE, config.NUM_CLASSES)
