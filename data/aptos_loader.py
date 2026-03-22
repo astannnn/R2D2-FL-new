@@ -1,8 +1,8 @@
-  # data/aptos_loader.py
+# data/aptos_loader.py
 
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
-from torch.utils.data import random_split
+from torch.utils.data import Subset
 
 import os
 import numpy as np
@@ -19,6 +19,38 @@ def create_mini_aptos():
         for i in range(5):
             img = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
             Image.fromarray(img).save(f"{folder}/img_{i}.jpg")
+
+
+def stratified_split_indices(targets, test_ratio=0.2, seed=1):
+    rng = np.random.default_rng(seed)
+
+    targets = np.array(targets)
+    train_indices = []
+    test_indices = []
+
+    classes = np.unique(targets)
+
+    for c in classes:
+        cls_indices = np.where(targets == c)[0]
+        rng.shuffle(cls_indices)
+
+        n_test = max(1, int(len(cls_indices) * test_ratio))
+        cls_test = cls_indices[:n_test]
+        cls_train = cls_indices[n_test:]
+
+        # safety: if class is extremely small, keep at least 1 sample in train too
+        if len(cls_train) == 0 and len(cls_test) > 1:
+            cls_train = cls_test[-1:]
+            cls_test = cls_test[:-1]
+
+        train_indices.extend(cls_train.tolist())
+        test_indices.extend(cls_test.tolist())
+
+    rng.shuffle(train_indices)
+    rng.shuffle(test_indices)
+
+    return train_indices, test_indices
+
 
 def load_aptos_raw(config):
 
@@ -49,30 +81,36 @@ def load_aptos_raw(config):
     # =========================
     if not os.path.exists("data/aptos/train"):
         create_mini_aptos()
-    full_dataset = ImageFolder(
+
+    # Base dataset without transform, only to read labels safely
+    base_dataset = ImageFolder(root="data/aptos/train", transform=None)
+    targets = base_dataset.targets
+
+    # =========================
+    # Stratified 80/20 split
+    # =========================
+    train_indices, test_indices = stratified_split_indices(
+        targets=targets,
+        test_ratio=0.2,
+        seed=config.SEED
+    )
+
+    # Separate datasets so train/test transforms do not mix
+    train_base = ImageFolder(
         root="data/aptos/train",
         transform=train_transform
     )
 
-    # 80/20 split
-    train_size = int(0.8 * len(full_dataset))
-    test_size = len(full_dataset) - train_size
-
-    train_dataset, test_dataset = random_split(
-        full_dataset,
-        [train_size, test_size]
+    test_base = ImageFolder(
+        root="data/aptos/train",
+        transform=test_transform
     )
 
-    # IMPORTANT:
-    # random_split removes .targets attribute
-    # We need to restore it for Dirichlet + noise
+    train_dataset = Subset(train_base, train_indices)
+    test_dataset = Subset(test_base, test_indices)
 
-    train_dataset.targets = [
-        full_dataset.targets[i] for i in train_dataset.indices
-    ]
-
-    test_dataset.targets = [
-        full_dataset.targets[i] for i in test_dataset.indices
-    ]
+    # restore targets for compatibility with partition/noise pipeline
+    train_dataset.targets = [targets[i] for i in train_indices]
+    test_dataset.targets = [targets[i] for i in test_indices]
 
     return train_dataset, test_dataset
