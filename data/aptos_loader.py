@@ -11,10 +11,6 @@ from torch.utils.data import Subset
 
 
 def create_mini_aptos():
-    """
-    Debug fallback only.
-    For final experiments, use the real APTOS dataset.
-    """
     print("APTOS not found. Creating mini dataset...")
 
     for cls in range(5):
@@ -58,7 +54,6 @@ def load_aptos_raw(config):
         )
     ])
 
-    # separate datasets so train/test transforms are different
     base_train = ImageFolder(root=root, transform=train_transform)
     base_test = ImageFolder(root=root, transform=test_transform)
 
