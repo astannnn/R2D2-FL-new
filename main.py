@@ -38,6 +38,52 @@ def validate_single_baseline(config):
 
 
 # =========================
+# APTOS-only safe partition
+# =========================
+
+def dirichlet_partition_aptos(labels, num_clients, alpha, min_size=10, max_attempts=50):
+    labels = np.array(labels)
+    num_classes = np.unique(labels).shape[0]
+
+    best_client_indices = None
+    best_min_size = -1
+
+    for _ in range(max_attempts):
+        label_indices = [np.where(labels == i)[0] for i in range(num_classes)]
+        client_indices = [[] for _ in range(num_clients)]
+
+        for c in range(num_classes):
+            np.random.shuffle(label_indices[c])
+
+            proportions = np.random.dirichlet(np.repeat(alpha, num_clients))
+            proportions = proportions / proportions.sum()
+
+            split_points = (
+                np.cumsum(proportions) * len(label_indices[c])
+            ).astype(int)[:-1]
+
+            split = np.split(label_indices[c], split_points)
+
+            for i in range(num_clients):
+                client_indices[i].extend(split[i].tolist())
+
+        for i in range(num_clients):
+            np.random.shuffle(client_indices[i])
+
+        sizes = [len(idx) for idx in client_indices]
+        current_min = min(sizes)
+
+        if current_min > best_min_size:
+            best_min_size = current_min
+            best_client_indices = client_indices
+
+        if current_min >= min_size:
+            return client_indices
+
+    return best_client_indices
+
+
+# =========================
 # Noise
 # =========================
 
@@ -75,7 +121,6 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
         }
 
     elif dataset_name == "aptos":
-        # Ordinal neighboring-class corruption
         mapping = {
             0: 1,
             1: 2,
@@ -229,11 +274,18 @@ def create_clients(train_dataset, config, model_factory):
 
     labels = torch.tensor(targets)
 
-    client_indices = dirichlet_partition(
-        labels.numpy(),
-        config.NUM_CLIENTS,
-        config.DIRICHLET_ALPHA
-    )
+    if config.DATASET == "aptos":
+        client_indices = dirichlet_partition_aptos(
+            labels.numpy(),
+            config.NUM_CLIENTS,
+            config.DIRICHLET_ALPHA
+        )
+    else:
+        client_indices = dirichlet_partition(
+            labels.numpy(),
+            config.NUM_CLIENTS,
+            config.DIRICHLET_ALPHA
+        )
 
     clients = []
     num_noisy_clients = int(config.NOISE_CLIENT_RATIO * config.NUM_CLIENTS)
@@ -264,7 +316,7 @@ def create_clients(train_dataset, config, model_factory):
             subset_ds,
             batch_size=config.BATCH_SIZE,
             shuffle=True,
-            num_workers=0,
+            num_workers=0 if config.DATASET == "aptos" else 0,
             pin_memory=(config.DEVICE == "cuda")
         )
 
@@ -387,10 +439,6 @@ def main(config=None):
             import torchvision.models as models
             import torch.nn as nn
 
-            # Important:
-            # Using pretrained ImageNet weights for every client can slow down
-            # startup a lot. This keeps the pipeline lighter and avoids hanging
-            # before the first round.
             m = models.resnet18(weights=None)
             m.fc = nn.Linear(m.fc.in_features, config.NUM_CLASSES)
             return m.to(config.DEVICE)
@@ -422,7 +470,7 @@ def main(config=None):
     print(f"Active clients created: {len(clients)}")
 
     if len(clients) == 0:
-        raise RuntimeError("No clients were created. Check APTOS dataset loading and partitioning.")
+        raise RuntimeError("No clients were created. Check dataset loading and partitioning.")
 
     global_model = make_model()
     server = Server(global_model)
@@ -464,16 +512,8 @@ def main(config=None):
         )
 
 
-from config import APTOSConfig  # CIFARConfig / EMNISTConfig / APTOSConfig
+from config import APTOSConfig
 
 if __name__ == "__main__":
     config = APTOSConfig()
-
-    # examples:
-    # config.USE_FEDPROX = True
-    # config.USE_FEDDF = True
-    # config.USE_R2D2 = True
-    # config.USE_SELECTIVE_FD = True
-    # config.USE_FEDNORO = True
-
     main(config)
