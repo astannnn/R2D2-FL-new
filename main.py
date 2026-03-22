@@ -447,10 +447,10 @@ def main(config=None):
         )
 
 
-from config import CIFARConfig  # CIFARConfig / EMNISTConfig / APTOSConfig
+from config import APTOSConfig  # CIFARConfig / EMNISTConfig / APTOSConfig
 
 if __name__ == "__main__":
-    config = CIFARConfig()
+    config = APTOSConfig()
 
     # examples:
     # config.USE_FEDPROX = True
