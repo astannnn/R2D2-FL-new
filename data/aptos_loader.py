@@ -1,13 +1,12 @@
-# data/aptos_loader.py
+  # data/aptos_loader.py
 
-import os
-import random
-import numpy as np
-
-from PIL import Image
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
-from torch.utils.data import Subset
+from torch.utils.data import random_split
+
+import os
+import numpy as np
+from PIL import Image
 
 
 def create_mini_aptos():
@@ -17,30 +16,21 @@ def create_mini_aptos():
         folder = f"data/aptos/train/{cls}"
         os.makedirs(folder, exist_ok=True)
 
-        for i in range(20):
+        for i in range(5):
             img = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
             Image.fromarray(img).save(f"{folder}/img_{i}.jpg")
 
-
-class SubsetWithTargets(Subset):
-    def __init__(self, dataset, indices, targets):
-        super().__init__(dataset, indices)
-        self.targets = list(targets)
-
-
 def load_aptos_raw(config):
-    root = "data/aptos/train"
 
-    if not os.path.exists(root):
-        create_mini_aptos()
-
+    # =========================
+    # Transforms
+    # =========================
     train_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(10),
         transforms.ToTensor(),
         transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
+            mean=[0.485, 0.456, 0.406],   # ImageNet
             std=[0.229, 0.224, 0.225]
         )
     ])
@@ -54,23 +44,35 @@ def load_aptos_raw(config):
         )
     ])
 
-    base_train = ImageFolder(root=root, transform=train_transform)
-    base_test = ImageFolder(root=root, transform=test_transform)
+    # =========================
+    # Load dataset
+    # =========================
+    if not os.path.exists("data/aptos/train"):
+        create_mini_aptos()
+    full_dataset = ImageFolder(
+        root="data/aptos/train",
+        transform=train_transform
+    )
 
-    n = len(base_train)
-    indices = list(range(n))
+    # 80/20 split
+    train_size = int(0.8 * len(full_dataset))
+    test_size = len(full_dataset) - train_size
 
-    rng = random.Random(config.SEED)
-    rng.shuffle(indices)
+    train_dataset, test_dataset = random_split(
+        full_dataset,
+        [train_size, test_size]
+    )
 
-    train_size = int(0.8 * n)
-    train_indices = indices[:train_size]
-    test_indices = indices[train_size:]
+    # IMPORTANT:
+    # random_split removes .targets attribute
+    # We need to restore it for Dirichlet + noise
 
-    train_targets = [base_train.targets[i] for i in train_indices]
-    test_targets = [base_test.targets[i] for i in test_indices]
+    train_dataset.targets = [
+        full_dataset.targets[i] for i in train_dataset.indices
+    ]
 
-    train_dataset = SubsetWithTargets(base_train, train_indices, train_targets)
-    test_dataset = SubsetWithTargets(base_test, test_indices, test_targets)
+    test_dataset.targets = [
+        full_dataset.targets[i] for i in test_dataset.indices
+    ]
 
     return train_dataset, test_dataset
