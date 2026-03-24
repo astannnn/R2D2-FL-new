@@ -257,7 +257,9 @@ class Client:
         loader = DataLoader(
             proxy_dataset,
             batch_size=getattr(self.config, "PROXY_BATCH_SIZE", 128),
-            shuffle=False
+            shuffle=False,
+            num_workers=2,
+            pin_memory=True
         )
 
         self.model.eval()
@@ -296,7 +298,9 @@ class Client:
         loader = DataLoader(
             proxy_dataset,
             batch_size=getattr(self.config, "PROXY_BATCH_SIZE", 128),
-            shuffle=False
+            shuffle=False,
+            num_workers=2,
+            pin_memory=True
         )
 
         self.model.train()
