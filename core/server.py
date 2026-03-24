@@ -41,7 +41,7 @@ class Server:
         device = config.DEVICE
         temperature = config.TEMPERATURE
 
-        loader = DataLoader(proxy_dataset, batch_size=128, shuffle=False)
+        loader = DataLoader(proxy_dataset, batch_size=128, shuffle=False, num_workers=2, pin_memory=True)
 
         num_clients = len(client_models)
         if num_clients == 0:
