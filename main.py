@@ -20,8 +20,6 @@ def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
 
 
 def validate_single_baseline(config):
@@ -38,52 +36,6 @@ def validate_single_baseline(config):
 
 
 # =========================
-# APTOS-only safe partition
-# =========================
-
-def dirichlet_partition_aptos(labels, num_clients, alpha, min_size=10, max_attempts=50):
-    labels = np.array(labels)
-    num_classes = np.unique(labels).shape[0]
-
-    best_client_indices = None
-    best_min_size = -1
-
-    for _ in range(max_attempts):
-        label_indices = [np.where(labels == i)[0] for i in range(num_classes)]
-        client_indices = [[] for _ in range(num_clients)]
-
-        for c in range(num_classes):
-            np.random.shuffle(label_indices[c])
-
-            proportions = np.random.dirichlet(np.repeat(alpha, num_clients))
-            proportions = proportions / proportions.sum()
-
-            split_points = (
-                np.cumsum(proportions) * len(label_indices[c])
-            ).astype(int)[:-1]
-
-            split = np.split(label_indices[c], split_points)
-
-            for i in range(num_clients):
-                client_indices[i].extend(split[i].tolist())
-
-        for i in range(num_clients):
-            np.random.shuffle(client_indices[i])
-
-        sizes = [len(idx) for idx in client_indices]
-        current_min = min(sizes)
-
-        if current_min > best_min_size:
-            best_min_size = current_min
-            best_client_indices = client_indices
-
-        if current_min >= min_size:
-            return client_indices
-
-    return best_client_indices
-
-
-# =========================
 # Noise
 # =========================
 
@@ -91,9 +43,6 @@ def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
     targets = np.array(dataset.targets)
 
     n_noisy = int(len(indices) * noise_rate)
-    if n_noisy <= 0:
-        return
-
     noisy_indices = np.random.choice(indices, n_noisy, replace=False)
 
     for idx in noisy_indices:
@@ -111,6 +60,7 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
         mapping = {8: 0, 9: 1, 3: 5, 4: 7}
 
     elif dataset_name == "emnist":
+        # EMNIST digits: visually similar confusions
         mapping = {
             1: 7,
             7: 1,
@@ -121,6 +71,14 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
         }
 
     elif dataset_name == "aptos":
+        # APTOS severity is ordinal, so asymmetric noise should mostly
+        # confuse neighboring grades rather than random distant classes.
+        #
+        # 0 -> 1
+        # 1 -> 2
+        # 2 -> 3
+        # 3 -> 4
+        # 4 -> 3
         mapping = {
             0: 1,
             1: 2,
@@ -138,11 +96,8 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
 
     n_noisy = int(len(indices) * noise_rate)
     n_noisy = min(n_noisy, len(candidates))
-    if n_noisy <= 0:
-        return
 
     noisy_indices = np.random.choice(candidates, n_noisy, replace=False)
-
     for idx in noisy_indices:
         targets[idx] = mapping[targets[idx]]
 
@@ -150,6 +105,7 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
 
 
 def apply_noise(dataset, indices, config, client_id):
+
     if config.NOISE_TYPE == "asymmetric" and config.DATASET not in ["cifar10", "emnist", "aptos"]:
         raise ValueError("Asymmetric noise only supported for CIFAR-10, EMNIST and APTOS")
 
@@ -175,6 +131,7 @@ def apply_noise(dataset, indices, config, client_id):
 # =========================
 
 def load_data(config):
+
     if config.DATASET == "emnist":
 
         def emnist_fix(x):
@@ -213,11 +170,13 @@ def load_data(config):
         proxy_base = full_train
 
     elif config.DATASET == "aptos":
+
         from data.aptos_loader import load_aptos_raw
         train_dataset, test_dataset = load_aptos_raw(config)
         proxy_base = train_dataset
 
     elif config.DATASET == "cifar10":
+
         transform = transforms.ToTensor()
 
         train_dataset = datasets.CIFAR10(
@@ -240,7 +199,7 @@ def load_data(config):
         raise ValueError(f"Unknown dataset: {config.DATASET}")
 
     proxy_dataset = None
-    if getattr(config, "PROXY_SIZE", 0) > 0 and len(proxy_base) > 0:
+    if getattr(config, "PROXY_SIZE", 0) > 0:
         proxy_size = min(config.PROXY_SIZE, len(proxy_base))
         proxy_indices = np.random.choice(len(proxy_base), proxy_size, replace=False)
         proxy_dataset = Subset(proxy_base, proxy_indices)
@@ -253,39 +212,23 @@ def load_data(config):
 # =========================
 
 def create_clients(train_dataset, config, model_factory):
+
     if isinstance(train_dataset, Subset):
         base_ds = train_dataset.dataset
         base_idxs = np.array(train_dataset.indices)
-
-        if hasattr(base_ds, "targets"):
-            targets = np.array(base_ds.targets)[base_idxs]
-        elif hasattr(base_ds, "labels"):
-            targets = np.array(base_ds.labels)[base_idxs]
-        else:
-            raise ValueError("Base dataset must provide targets or labels.")
+        targets = np.array(base_ds.targets)[base_idxs]
     else:
         base_ds = train_dataset
         base_idxs = None
-
-        raw_targets = getattr(train_dataset, "targets", getattr(train_dataset, "labels", None))
-        if raw_targets is None:
-            raise ValueError("Dataset must provide targets or labels.")
-        targets = np.array(raw_targets)
+        targets = np.array(getattr(train_dataset, "targets", getattr(train_dataset, "labels", None)))
 
     labels = torch.tensor(targets)
 
-    if config.DATASET == "aptos":
-        client_indices = dirichlet_partition_aptos(
-            labels.numpy(),
-            config.NUM_CLIENTS,
-            config.DIRICHLET_ALPHA
-        )
-    else:
-        client_indices = dirichlet_partition(
-            labels.numpy(),
-            config.NUM_CLIENTS,
-            config.DIRICHLET_ALPHA
-        )
+    client_indices = dirichlet_partition(
+        labels.numpy(),
+        config.NUM_CLIENTS,
+        config.DIRICHLET_ALPHA
+    )
 
     clients = []
     num_noisy_clients = int(config.NOISE_CLIENT_RATIO * config.NUM_CLIENTS)
@@ -295,10 +238,8 @@ def create_clients(train_dataset, config, model_factory):
     print(f"Noise rate: {config.NOISE_RATE}")
 
     for i in range(config.NUM_CLIENTS):
-        idx_local = np.array(client_indices[i], dtype=int)
 
-        if len(idx_local) == 0:
-            continue
+        idx_local = np.array(client_indices[i], dtype=int)
 
         if base_idxs is not None:
             idx_base = base_idxs[idx_local]
@@ -316,8 +257,8 @@ def create_clients(train_dataset, config, model_factory):
             subset_ds,
             batch_size=config.BATCH_SIZE,
             shuffle=True,
-            num_workers=0 if config.DATASET == "aptos" else 0,
-            pin_memory=(config.DEVICE == "cuda")
+            num_workers=2,
+            pin_memory=True
         )
 
         model = model_factory()
@@ -331,17 +272,10 @@ def create_clients(train_dataset, config, model_factory):
 # =========================
 
 def evaluate_global(model, test_dataset, config):
-    eval_batch_size = 32 if config.DATASET == "aptos" else 128
 
-    loader = DataLoader(
-        test_dataset,
-        batch_size=eval_batch_size,
-        shuffle=False,
-        num_workers=0,
-        pin_memory=(config.DEVICE == "cuda")
-    )
-
+    loader = DataLoader(test_dataset, batch_size=128, shuffle=False, num_workers=2, pin_memory=True)
     model.eval()
+
     correct = 0
     total = 0
     all_preds = []
@@ -362,12 +296,13 @@ def evaluate_global(model, test_dataset, config):
             all_targets.extend(y.cpu().numpy())
 
     acc = correct / total if total > 0 else 0.0
-    macro_f1 = f1_score(all_targets, all_preds, average="macro") if total > 0 else 0.0
+    macro_f1 = f1_score(all_targets, all_preds, average="macro")
 
     return acc, macro_f1
 
 
 def evaluate_per_client(server_model, clients, config):
+
     server_model.eval()
     client_accuracies = []
 
@@ -375,7 +310,6 @@ def evaluate_per_client(server_model, clients, config):
         for client in clients:
             correct = 0
             total = 0
-
             for x, y in client.train_loader:
                 x = x.to(config.DEVICE)
                 y = y.to(config.DEVICE)
@@ -426,8 +360,6 @@ def selective_fd_step(selected_clients, server, proxy_dataset, config):
 # =========================
 
 def main(config=None):
-    if config is None:
-        raise ValueError("config must be provided")
 
     validate_single_baseline(config)
 
@@ -435,11 +367,12 @@ def main(config=None):
     set_seed(config.SEED)
 
     def make_model():
+
         if config.DATASET == "aptos":
             import torchvision.models as models
             import torch.nn as nn
 
-            m = models.resnet18(weights=None)
+            m = models.resnet18(weights="IMAGENET1K_V1")
             m.fc = nn.Linear(m.fc.in_features, config.NUM_CLASSES)
             return m.to(config.DEVICE)
 
@@ -469,13 +402,11 @@ def main(config=None):
 
     print(f"Active clients created: {len(clients)}")
 
-    if len(clients) == 0:
-        raise RuntimeError("No clients were created. Check dataset loading and partitioning.")
-
     global_model = make_model()
     server = Server(global_model)
 
     for r in range(config.ROUNDS):
+
         m = max(1, int(config.CLIENT_FRACTION * len(clients)))
         selected_clients = random.sample(clients, m)
 
@@ -491,9 +422,15 @@ def main(config=None):
 
         server.aggregate(client_weights, client_sizes)
 
+        # -------------------------
+        # Selective-FD path
+        # -------------------------
         if getattr(config, "USE_SELECTIVE_FD", False) and proxy_dataset is not None:
             selective_fd_step(selected_clients, server, proxy_dataset, config)
 
+        # -------------------------
+        # Existing FedDF / R2D2 path
+        # -------------------------
         elif (config.USE_FEDDF or config.USE_R2D2) and proxy_dataset is not None:
             server.distill(
                 [c.model for c in selected_clients],
@@ -512,8 +449,16 @@ def main(config=None):
         )
 
 
-from config import APTOSConfig
+from config import CIFARConfig  # CIFARConfig / EMNISTConfig / APTOSConfig
 
 if __name__ == "__main__":
-    config = APTOSConfig()
+    config = CIFARConfig()
+
+    # examples:
+    # config.USE_FEDPROX = True
+    # config.USE_FEDDF = True
+    # config.USE_R2D2 = True
+    # config.USE_SELECTIVE_FD = True
+    # config.USE_FEDNORO = True
+
     main(config)
