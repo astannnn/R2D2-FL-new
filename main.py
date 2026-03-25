@@ -1,4 +1,5 @@
 import random
+import time
 import numpy as np
 import torch
 
@@ -33,6 +34,13 @@ def validate_single_baseline(config):
 
     if sum(active_methods) > 1:
         raise ValueError("Only one baseline method can be active at a time.")
+
+
+def get_model_size_bytes(model):
+    total_bytes = 0
+    for param in model.parameters():
+        total_bytes += param.numel() * param.element_size()
+    return total_bytes
 
 
 # =========================
@@ -73,12 +81,6 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
     elif dataset_name == "aptos":
         # APTOS severity is ordinal, so asymmetric noise should mostly
         # confuse neighboring grades rather than random distant classes.
-        #
-        # 0 -> 1
-        # 1 -> 2
-        # 2 -> 3
-        # 3 -> 4
-        # 4 -> 3
         mapping = {
             0: 1,
             1: 2,
@@ -405,7 +407,11 @@ def main(config=None):
     global_model = make_model()
     server = Server(global_model)
 
+    model_size_bytes = get_model_size_bytes(server.global_model)
+
     for r in range(config.ROUNDS):
+
+        round_start = time.time()
 
         m = max(1, int(config.CLIENT_FRACTION * len(clients)))
         selected_clients = random.sample(clients, m)
@@ -413,12 +419,16 @@ def main(config=None):
         client_weights = []
         client_sizes = []
 
+        downlink_bytes = model_size_bytes * len(selected_clients)
+
         for client in selected_clients:
             client.model.load_state_dict(server.global_model.state_dict())
             w = client.local_train(global_model=server.global_model, round_idx=r)
 
             client_weights.append(w)
             client_sizes.append(len(client.train_loader.dataset))
+
+        uplink_bytes = model_size_bytes * len(selected_clients)
 
         server.aggregate(client_weights, client_sizes)
 
@@ -441,11 +451,17 @@ def main(config=None):
         global_acc, macro_f1_val = evaluate_global(server.global_model, test_dataset, config)
         worst_acc = evaluate_per_client(server.global_model, clients, config)
 
+        round_time = time.time() - round_start
+        round_comm_bytes = downlink_bytes + uplink_bytes
+        round_comm_mb = round_comm_bytes / (1024 ** 2)
+
         print(
             f"Round {r+1:03d} | "
             f"Global={global_acc:.4f} | "
             f"MacroF1={macro_f1_val:.4f} | "
-            f"Worst={worst_acc:.4f}"
+            f"Worst={worst_acc:.4f} | "
+            f"Time={round_time:.2f}s | "
+            f"Comm={round_comm_mb:.2f}MB"
         )
 
 
