@@ -132,9 +132,9 @@ class APTOSConfig(BaseConfig):
     NUM_CLIENTS = 15
     CLIENT_FRACTION = 0.5
     LOCAL_EPOCHS = 1
-    ROUNDS = 15
+    ROUNDS = 25
     BATCH_SIZE = 8
-    LR = 0.0001
+    LR = 0.00005
 
     # Noise
     NOISE_CLIENT_RATIO = 0.5
@@ -142,4 +142,4 @@ class APTOSConfig(BaseConfig):
     NOISE_TYPE = "symmetric"
 
     # Proxy
-    PROXY_SIZE = 400
+    PROXY_SIZE = 200
