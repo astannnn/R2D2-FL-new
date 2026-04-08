@@ -385,6 +385,7 @@ def main(config=None):
 
     print("=== CONFIG ===")
     print(f"DEVICE={config.DEVICE}")
+    print(f"SEED={config.SEED}")
     print(f"NUM_CLIENTS={config.NUM_CLIENTS}")
     print(f"CLIENT_FRACTION={config.CLIENT_FRACTION}")
     print(f"LOCAL_EPOCHS={config.LOCAL_EPOCHS}")
