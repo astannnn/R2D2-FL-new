@@ -2,9 +2,9 @@ import os
 import shutil
 import pandas as pd
 
-csv_path   = "/content/R2D2-FL-new/aptos_data/train.csv"
-images_dir = "/content/R2D2-FL-new/aptos_data/train_images"
-output_dir = "/content/R2D2-FL-new/data/aptos/train"
+csv_path = "data/aptos/raw/train.csv"
+images_dir = "data/aptos/raw/train_images"
+output_dir = "data/aptos/train"
 
 df = pd.read_csv(csv_path)
 print(f"Total images in CSV: {len(df)}")
@@ -17,8 +17,9 @@ ok = 0
 missing = 0
 
 for _, row in df.iterrows():
-    src = os.path.join(images_dir, row["id_code"] + ".png")
-    dst = os.path.join(output_dir, str(row["diagnosis"]), row["id_code"] + ".png")
+    image_name = str(row["id_code"]) + ".png"
+    src = os.path.join(images_dir, image_name)
+    dst = os.path.join(output_dir, str(row["diagnosis"]), image_name)
 
     if os.path.exists(src):
         shutil.copy2(src, dst)

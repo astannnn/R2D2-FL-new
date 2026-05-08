@@ -41,7 +41,13 @@ class Server:
         device = config.DEVICE
         temperature = config.TEMPERATURE
 
-        loader = DataLoader(proxy_dataset, batch_size=128, shuffle=False, num_workers=2, pin_memory=True)
+        loader = DataLoader(
+            proxy_dataset,
+            batch_size=128,
+            shuffle=False,
+            num_workers=getattr(config, "DATALOADER_NUM_WORKERS", 0),
+            pin_memory=getattr(config, "DATALOADER_PIN_MEMORY", False)
+        )
 
         num_clients = len(client_models)
         if num_clients == 0:
@@ -83,7 +89,8 @@ class Server:
                     preds_list.append(torch.argmax(logits, dim=1))
 
                 preds = torch.stack(preds_list, dim=0)
-                maj, _ = torch.mode(preds, dim=0)
+                maj, _ = torch.mode(preds.cpu(), dim=0)
+                maj = maj.to(device)
 
                 B = x.size(0)
                 total_samples += B
@@ -155,7 +162,8 @@ class Server:
                     preds_list.append(torch.argmax(z, dim=1))
 
                 preds = torch.stack(preds_list, dim=0)
-                maj, _ = torch.mode(preds, dim=0)
+                maj, _ = torch.mode(preds.cpu(), dim=0)
+                maj = maj.to(device)
 
             alphas = torch.zeros(
                 (num_clients, x.size(0)),

@@ -1,5 +1,6 @@
 import random
 import time
+import os
 import numpy as np
 import torch
 
@@ -16,6 +17,11 @@ from core.server import Server
 # =========================
 # Utils
 # =========================
+
+def emnist_fix(x):
+    x = torch.rot90(x, 1, [1, 2])
+    x = torch.flip(x, [2])
+    return x
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -48,7 +54,7 @@ def get_model_size_bytes(model):
 # =========================
 
 def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
-    targets = np.array(dataset.targets)
+    targets = np.array(get_dataset_targets(dataset))
 
     n_noisy = int(len(indices) * noise_rate)
     noisy_indices = np.random.choice(indices, n_noisy, replace=False)
@@ -58,11 +64,11 @@ def inject_symmetric_noise(dataset, indices, noise_rate, num_classes):
         new_label = np.random.choice([c for c in range(num_classes) if c != original])
         targets[idx] = new_label
 
-    dataset.targets = targets.tolist()
+    set_dataset_targets(dataset, targets.tolist())
 
 
 def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
-    targets = np.array(dataset.targets)
+    targets = np.array(get_dataset_targets(dataset))
 
     if dataset_name == "cifar10":
         mapping = {8: 0, 9: 1, 3: 5, 4: 7}
@@ -103,7 +109,33 @@ def inject_asymmetric_noise(dataset, indices, noise_rate, dataset_name):
     for idx in noisy_indices:
         targets[idx] = mapping[targets[idx]]
 
-    dataset.targets = targets.tolist()
+    set_dataset_targets(dataset, targets.tolist())
+
+
+def get_dataset_targets(dataset):
+    if hasattr(dataset, "targets"):
+        return list(dataset.targets)
+
+    if hasattr(dataset, "samples"):
+        return [label for _, label in dataset.samples]
+
+    raise AttributeError("Dataset does not expose targets/samples for noise injection.")
+
+
+def set_dataset_targets(dataset, new_targets):
+    # Keep canonical targets in sync when available.
+    if hasattr(dataset, "targets"):
+        dataset.targets = list(new_targets)
+
+    # ImageFolder reads labels from samples/imgs during __getitem__,
+    # so we must rewrite samples as well for noise to take effect.
+    if hasattr(dataset, "samples"):
+        dataset.samples = [
+            (path, int(new_targets[i])) for i, (path, _) in enumerate(dataset.samples)
+        ]
+
+        if hasattr(dataset, "imgs"):
+            dataset.imgs = list(dataset.samples)
 
 
 def apply_noise(dataset, indices, config, client_id):
@@ -135,11 +167,6 @@ def apply_noise(dataset, indices, config, client_id):
 def load_data(config):
 
     if config.DATASET == "emnist":
-
-        def emnist_fix(x):
-            x = torch.rot90(x, 1, [1, 2])
-            x = torch.flip(x, [2])
-            return x
 
         transform = transforms.Compose([
             transforms.ToTensor(),
@@ -259,8 +286,8 @@ def create_clients(train_dataset, config, model_factory):
             subset_ds,
             batch_size=config.BATCH_SIZE,
             shuffle=True,
-            num_workers=2,
-            pin_memory=True
+            num_workers=getattr(config, "DATALOADER_NUM_WORKERS", 0),
+            pin_memory=getattr(config, "DATALOADER_PIN_MEMORY", False)
         )
 
         model = model_factory()
@@ -275,7 +302,13 @@ def create_clients(train_dataset, config, model_factory):
 
 def evaluate_global(model, test_dataset, config):
 
-    loader = DataLoader(test_dataset, batch_size=128, shuffle=False, num_workers=2, pin_memory=True)
+    loader = DataLoader(
+        test_dataset,
+        batch_size=128,
+        shuffle=False,
+        num_workers=getattr(config, "DATALOADER_NUM_WORKERS", 0),
+        pin_memory=getattr(config, "DATALOADER_PIN_MEMORY", False)
+    )
     model.eval()
 
     correct = 0
@@ -364,6 +397,11 @@ def selective_fd_step(selected_clients, server, proxy_dataset, config):
 def main(config=None):
 
     validate_single_baseline(config)
+
+    # Improve CPU throughput when accelerator is not available.
+    if config.DEVICE == "cpu":
+        cpu_count = os.cpu_count() or 1
+        torch.set_num_threads(max(1, cpu_count))
 
     print("DATASET =", config.DATASET)
     set_seed(config.SEED)
@@ -466,10 +504,10 @@ def main(config=None):
         )
 
 
-from config import CIFARConfig  # CIFARConfig / EMNISTConfig / APTOSConfig
+from config import APTOSConfig  # CIFARConfig / EMNISTConfig / APTOSConfig
 
 if __name__ == "__main__":
-    config = CIFARConfig()
+    config = APTOSConfig()
 
     # examples:
     # config.USE_FEDPROX = True

@@ -1,4 +1,5 @@
 import torch
+import sys
 
 
 # =====================================================
@@ -10,10 +11,23 @@ class BaseConfig:
     DISTILL_LR = 0.001
 
     # Reproducibility
-    SEED = 1
+    SEED = 3
 
-    # Device
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    # Device (prefer CUDA, then Apple MPS, then CPU)
+    if torch.cuda.is_available():
+        DEVICE = "cuda"
+    elif torch.backends.mps.is_available():
+        DEVICE = "mps"
+    else:
+        DEVICE = "cpu"
+
+    # DataLoader defaults (macOS-safe by default, override per experiment if needed)
+    if sys.platform == "darwin":
+        DATALOADER_NUM_WORKERS = 0
+        DATALOADER_PIN_MEMORY = False
+    else:
+        DATALOADER_NUM_WORKERS = 2
+        DATALOADER_PIN_MEMORY = True
 
     # Dirichlet partition
     DIRICHLET_ALPHA = 0.3
@@ -21,7 +35,7 @@ class BaseConfig:
     # ================= Method switches =================
     USE_R2D2 = False
     USE_FEDDF = False
-    USE_FEDPROX = False
+    USE_FEDPROX = False 
     USE_SELECTIVE_FD = False
     USE_FEDNORO = False
 
@@ -132,14 +146,14 @@ class APTOSConfig(BaseConfig):
     NUM_CLIENTS = 15
     CLIENT_FRACTION = 0.5
     LOCAL_EPOCHS = 1
-    ROUNDS = 25
+    ROUNDS = 30
     BATCH_SIZE = 8
     LR = 0.00005
 
     # Noise
     NOISE_CLIENT_RATIO = 0.5
-    NOISE_RATE = 0.0
-    NOISE_TYPE = "symmetric"
+    NOISE_RATE = 0.4
+    NOISE_TYPE = "heterogeneous"
 
     # Proxy
     PROXY_SIZE = 200

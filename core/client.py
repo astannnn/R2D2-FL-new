@@ -258,8 +258,8 @@ class Client:
             proxy_dataset,
             batch_size=getattr(self.config, "PROXY_BATCH_SIZE", 128),
             shuffle=False,
-            num_workers=2,
-            pin_memory=True
+            num_workers=getattr(self.config, "DATALOADER_NUM_WORKERS", 0),
+            pin_memory=getattr(self.config, "DATALOADER_PIN_MEMORY", False)
         )
 
         self.model.eval()
@@ -299,8 +299,8 @@ class Client:
             proxy_dataset,
             batch_size=getattr(self.config, "PROXY_BATCH_SIZE", 128),
             shuffle=False,
-            num_workers=2,
-            pin_memory=True
+            num_workers=getattr(self.config, "DATALOADER_NUM_WORKERS", 0),
+            pin_memory=getattr(self.config, "DATALOADER_PIN_MEMORY", False)
         )
 
         self.model.train()
