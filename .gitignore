@@ -3,15 +3,20 @@ venv/
 __pycache__/
 *.pyc
 
+# Ignore datasets
 data/aptos/
 data/EMNIST/
 data/cifar-10-batches-py/
 data/cifar-10-python.tar.gz
+*.zip
+*.tar.gz
 
+# Ignore experiment outputs
 results/
 logs/
 checkpoints/
 *.pt
 *.pth
 *.pkl
+
 .DS_Store
