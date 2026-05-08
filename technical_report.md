@@ -5,14 +5,17 @@
 
 ## 1. Introduction
 
-This report presents the implementation and experimental validation of **R2D2-FL (Reliability-Weighted Robust Distillation for Federated Learning)** under heterogeneous and noisy federated learning environments.
+This technical report presents the implementation and experimental validation of **R2D2-FL (Reliability-Weighted Robust Distillation for Federated Learning)** under heterogeneous and noisy federated learning environments.
 
-The objective of this project is to evaluate whether reliability-aware aggregation combined with proxy-based knowledge distillation can improve robustness compared to standard federated optimization methods in realistic non-IID and noisy-label settings.
+The objective of this project is to evaluate whether reliability-aware client weighting combined with proxy-based knowledge distillation can improve robustness compared to standard federated optimization and federated distillation methods in realistic non-IID and noisy-label settings.
 
 The project includes:
 
-- Implementation of **FedAvg** baseline
-- Implementation of **FedProx** baseline
+- Implementation and evaluation of **FedAvg**
+- Implementation and evaluation of **FedProx**
+- Implementation and evaluation of **FedDF**
+- Implementation and evaluation of **Selective-FD**
+- Implementation and evaluation of **FedNoRo**
 - Modular implementation of **R2D2-FL**
 - Dirichlet-based non-IID simulation with α = 0.3
 - Multiple label noise regimes
@@ -22,7 +25,7 @@ The project includes:
 - Reproducible configuration control
 - GitHub repository containing only source code, configuration files, documentation, and validation notebooks
 
-Large datasets, virtual environments, checkpoints, and generated outputs are intentionally excluded from the repository.
+Large datasets, virtual environments, checkpoints, logs, and generated outputs are intentionally excluded from the repository.
 
 ---
 
@@ -30,7 +33,7 @@ Large datasets, virtual environments, checkpoints, and generated outputs are int
 
 Earlier parts of the project were executed through GitHub and Google Colab due to limited local computational resources. After moving to a Mac environment, the project was further developed and tested locally using Cursor/VS Code.
 
-The final repository is organized so that the professor can clone or pull the project without downloading unnecessary large files.
+The final repository is organized so that the project can be cloned or pulled without downloading unnecessary large files.
 
 The repository contains:
 
@@ -48,9 +51,9 @@ test_aptos.ipynb
 .gitignore
 ```
 
-The Jupyter notebooks are included only for dataset validation, Google Colab testing, and quick experimental checks. The main implementation is contained in the Python source files.
+The Jupyter notebooks are included for dataset validation, Google Colab testing, and quick experimental checks. The main implementation is contained in the Python source files.
 
-The following files are excluded from GitHub:
+The following files and directories are excluded from GitHub:
 
 ```text
 .venv/
@@ -75,17 +78,21 @@ This avoids GitHub size limitations and keeps the repository clean.
 
 ## 3. Dataset Management
 
-The project uses three datasets.
+The project uses three datasets: CIFAR-10, EMNIST, and APTOS 2019.
 
-### CIFAR-10
+### 3.1 CIFAR-10
 
 CIFAR-10 is downloaded automatically through `torchvision`.
 
-### EMNIST
+It is used as the main controlled benchmark for testing robustness under synthetic label noise and non-IID client partitioning.
+
+### 3.2 EMNIST
 
 EMNIST is downloaded automatically through `torchvision`.
 
-### APTOS 2019
+In this project, the EMNIST Digits split is used as a 10-class grayscale image classification task.
+
+### 3.3 APTOS 2019
 
 APTOS 2019 is used as the medical image classification dataset.
 
@@ -105,6 +112,8 @@ The repository includes only the code required to prepare and load the dataset:
 prepare_aptos.py
 data/aptos_loader.py
 ```
+
+APTOS preprocessing includes image resizing, normalization, and loading labels from the CSV file.
 
 ---
 
@@ -152,6 +161,19 @@ This provides:
 
 ## 5. Baseline Methods
 
+The project compares R2D2-FL against several federated learning and federated distillation baselines.
+
+The evaluated methods are:
+
+- FedAvg
+- FedProx
+- FedDF
+- Selective-FD
+- FedNoRo
+- R2D2-FL
+
+---
+
 ### 5.1 FedAvg
 
 FedAvg is implemented as the standard federated parameter averaging baseline.
@@ -178,11 +200,41 @@ FedProx extends FedAvg by adding a proximal regularization term to the local tra
 
 This term is designed to reduce client drift under heterogeneous data distributions.
 
-FedProx is included to evaluate whether proximal regularization alone improves robustness under noisy federated settings.
+FedProx is included to evaluate whether proximal regularization improves robustness under noisy federated settings.
 
 ---
 
-### 5.3 Additional Method Switches
+### 5.3 FedDF
+
+FedDF is implemented as a federated distillation baseline.
+
+Instead of relying only on parameter averaging, FedDF performs server-side distillation using predictions from client models on a proxy dataset.
+
+FedDF is included because it is a direct comparison point for R2D2-FL, since both methods use proxy-based distillation at the server side.
+
+---
+
+### 5.4 Selective-FD
+
+Selective-FD is included as a selective federated distillation baseline.
+
+The method is based on selective knowledge sharing, where ambiguous or unreliable predictions are filtered before distillation.
+
+Selective-FD is useful for evaluating whether selective distillation improves robustness under noisy and heterogeneous data distributions.
+
+---
+
+### 5.5 FedNoRo
+
+FedNoRo is included as a noisy-label robust federated learning baseline.
+
+It is designed to improve learning when local client datasets contain corrupted labels or suspicious local data.
+
+FedNoRo is particularly relevant for comparison under symmetric, asymmetric, and heterogeneous label noise settings.
+
+---
+
+### 5.6 Method Switches
 
 The implementation includes method switches for comparison and ablation experiments:
 
@@ -226,7 +278,7 @@ The experimental campaign was conducted under the following noise settings for e
 - 40% asymmetric label noise
 - 40% heterogeneous client-level noise
 
-Noise is injected after client partitioning. This is important because it allows each client to have its own local corruption pattern.
+Noise is injected after client partitioning. This is important because it allows each client to first receive a non-IID local dataset and then receive label corruption according to the selected setting.
 
 In the heterogeneous noise setting, only a subset of clients receives corrupted labels. This allows the framework to test robustness against unreliable clients.
 
@@ -253,15 +305,27 @@ Instead of relying only on direct parameter averaging, R2D2-FL uses proxy-based 
 
 Each selected client receives the current global model and performs local training.
 
-### 1. Confidence-Based Sample Selection
+### 7.1.1 Confidence-Based Sample Selection
 
 For each local sample, the client estimates prediction confidence.
 
 High-confidence samples are treated as more reliable, while low-confidence samples are handled with soft label correction.
 
+A simplified confidence rule can be written as:
+
+\[
+m_i = \mathbf{1}[p_{w^k}(y_i | x_i) > \gamma]
+\]
+
+where:
+
+- \(m_i\) indicates whether sample \(i\) is high-confidence
+- \(p_{w^k}(y_i | x_i)\) is the probability assigned to the given label
+- \(\gamma\) is the confidence threshold
+
 ---
 
-### 2. Soft Label Correction
+### 7.1.2 Soft Label Correction
 
 For low-confidence samples, the original label is mixed with the global teacher prediction:
 
@@ -273,7 +337,7 @@ This reduces the effect of incorrect labels while still preserving information f
 
 ---
 
-### 3. Local Knowledge Distillation
+### 7.1.3 Local Knowledge Distillation
 
 The local model is encouraged to stay close to the global teacher distribution:
 
@@ -287,7 +351,7 @@ The final local objective is:
 \mathcal{L}_k = \mathcal{L}_{sup} + \beta \mathcal{L}_{locKD}
 \]
 
-This helps reduce overfitting to corrupted local data.
+This helps reduce overfitting to corrupted local data and limits client drift under non-IID distributions.
 
 ---
 
@@ -295,7 +359,7 @@ This helps reduce overfitting to corrupted local data.
 
 After local training, the server receives selected client models and performs reliability-aware aggregation through proxy-based distillation.
 
-### 1. Reliability Estimation
+### 7.2.1 Reliability Estimation
 
 Using the proxy dataset, the server evaluates each selected client model.
 
@@ -306,11 +370,24 @@ Reliability is estimated using:
 - Class-level reliability
 - Prediction confidence or entropy
 
+A simplified client-level reliability score can be represented as:
+
+\[
+r_k = \mathbb{E}_{x \sim D_p}
+\mathbf{1}[\arg\max p_k(x) = \arg\max p_{maj}(x)]
+\]
+
+where:
+
+- \(D_p\) is the proxy dataset
+- \(p_k(x)\) is the prediction of client \(k\)
+- \(p_{maj}(x)\) is the majority or consensus prediction
+
 This allows the server to reduce the influence of unreliable or corrupted clients.
 
 ---
 
-### 2. Reliability-Weighted Ensemble Teacher
+### 7.2.2 Reliability-Weighted Ensemble Teacher
 
 The server constructs an ensemble teacher by weighting client predictions according to reliability.
 
@@ -320,16 +397,35 @@ The weighting considers:
 - Class-specific reliability
 - Prediction entropy
 
-This produces a more stable teacher distribution for proxy-based distillation.
+A simplified reliability-aware weight can be written as:
+
+\[
+\alpha_k(x) =
+\sigma(r_k) \cdot \sigma(r_{k,\hat{c}(x)}) \cdot (1 - H(p_k(x)))
+\]
+
+The ensemble teacher logits are computed as:
+
+\[
+z_T(x) = \sum_{k \in S_t} \alpha_k(x) z_k(x)
+\]
+
+The teacher distribution is obtained through temperature-scaled softmax:
+
+\[
+p_T(\cdot | x) = softmax(z_T(x) / \tau)
+\]
 
 ---
 
-### 3. Proxy-Based Global Distillation
+### 7.2.3 Proxy-Based Global Distillation
 
 The global model is updated by minimizing the KL divergence between the ensemble teacher and the global model:
 
 \[
-\mathcal{L}_{KD} = KL(p_{teacher} \| p_{global})
+\mathcal{L}_{KD} =
+\mathbb{E}_{x \sim D_p}
+KL(p_T(\cdot | x) \| p_w(\cdot | x))
 \]
 
 The purpose is to transfer reliable client knowledge into the global model while limiting the effect of noisy clients.
@@ -362,14 +458,32 @@ This process is repeated for the configured number of communication rounds.
 The project uses three datasets:
 
 - CIFAR-10
-- EMNIST
+- EMNIST Digits
 - APTOS 2019
 
 CIFAR-10 and EMNIST are downloaded automatically through `torchvision`. APTOS 2019 is stored locally and loaded through custom dataset loading code.
 
 ---
 
-### 9.2 Experimental Conditions
+### 9.2 Federated Configurations
+
+The final experimental configurations are:
+
+| Dataset | Clients | Client Fraction | Local Epochs | Rounds | Batch Size | Learning Rate | Proxy Size |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| CIFAR-10 | 8 | 0.75 | 2 | 30 | 128 | 0.01 | 1000 |
+| EMNIST | 8 | 0.75 | 2 | 20 | 64 | 0.005 | 5000 |
+| APTOS 2019 | 15 | 0.50 | 1 | 30 | 8 | 0.00005 | 200 |
+
+All datasets use Dirichlet partitioning with:
+
+```text
+DIRICHLET_ALPHA = 0.3
+```
+
+---
+
+### 9.3 Experimental Conditions
 
 Each dataset was evaluated under the following noise settings:
 
@@ -381,13 +495,17 @@ Each dataset was evaluated under the following noise settings:
 40% heterogeneous noise
 ```
 
-Each experiment was repeated using three random seeds.
+Each experiment was repeated using three random seeds:
+
+```text
+1, 2, 3
+```
 
 This seed-based evaluation was used to reduce randomness and provide more reliable comparisons.
 
 ---
 
-### 9.3 Metrics
+### 9.4 Metrics
 
 The framework reports:
 
@@ -396,7 +514,7 @@ The framework reports:
 - Macro-F1 score
 - Round-wise training time
 - Communication cost estimate
-- Best round performance
+- Best-round performance
 - Convergence behavior across communication rounds
 
 For APTOS, Macro-F1 is especially important because the dataset is imbalanced.
@@ -409,38 +527,46 @@ For APTOS, Macro-F1 is especially important because the dataset is imbalanced.
 
 CIFAR-10 is used as the main controlled benchmark.
 
+The final results show that R2D2-FL achieves the strongest overall performance on CIFAR-10 across all evaluated noise regimes.
+
 Observed behavior:
 
-- FedAvg performs well in clean settings.
-- Under strong symmetric noise, robustness becomes more challenging.
-- R2D2-FL is designed to improve stability by reducing the influence of unreliable clients.
-- Worst-client accuracy is important because global accuracy alone may hide poor client-level performance.
+- R2D2-FL achieves the best average global accuracy, Macro-F1, and worst-client accuracy across all CIFAR-10 noise settings.
+- The advantage is especially clear under 40% symmetric noise and 40% heterogeneous client-level noise.
+- The heterogeneous client-level noise setting aligns well with the design of R2D2-FL because only a subset of clients is corrupted.
+- Reliability-aware distillation reduces the influence of unreliable clients and improves global robustness.
 
 ---
 
 ### 10.2 EMNIST
 
-EMNIST provides a lighter benchmark for testing the pipeline across multiple seeds and configurations.
+EMNIST provides a lighter grayscale benchmark for testing the pipeline across multiple seeds and configurations.
 
 Observed behavior:
 
-- Training is faster than APTOS.
-- It is useful for validating method switches and ablation settings.
-- Performance can still be sensitive under strong label noise.
+- R2D2-FL achieves the best global accuracy and Macro-F1 in most EMNIST settings.
+- R2D2-FL performs best under clean, symmetric, and heterogeneous noise settings.
+- Under 40% asymmetric noise, FedNoRo achieves the best global accuracy and Macro-F1.
+- R2D2-FL remains competitive under asymmetric noise and achieves strong worst-client performance.
+- EMNIST is easier than CIFAR-10 and APTOS, so performance differences between methods are generally smaller.
 
 ---
 
 ### 10.3 APTOS 2019
 
-APTOS is the most computationally expensive dataset in the project.
+APTOS is the most computationally expensive and unstable dataset in the project.
 
 Observed behavior:
 
 - Training is significantly slower than CIFAR-10 and EMNIST.
 - The dataset is highly imbalanced.
 - Macro-F1 is necessary for fair evaluation.
-- Results can fluctuate more strongly due to medical image complexity and class imbalance.
-- Running many APTOS experiments is computationally expensive, but the required three-seed experiments were still performed.
+- Results fluctuate more strongly due to medical image complexity and class imbalance.
+- No single method dominates across all APTOS settings.
+- R2D2-FL achieves the best global accuracy under 40% heterogeneous client-level noise.
+- FedProx, FedDF, and Selective-FD perform better in some APTOS settings, especially for Macro-F1 and worst-client accuracy.
+
+APTOS therefore acts as a realistic stress test for noisy and heterogeneous federated learning.
 
 ---
 
@@ -448,23 +574,25 @@ Observed behavior:
 
 An ablation study was conducted to analyze the contribution of the main R2D2-FL components.
 
-The ablation study was not repeated across every noise setting. Instead, it focused on the main noisy setting in order to isolate the effect of each component.
+The ablation study was conducted on CIFAR-10 under the 40% symmetric label noise setting.
 
 Ablation variants include:
 
+- Full R2D2-FL
 - Removing reliability weighting
 - Removing class-level reliability
 - Removing soft label correction
 - Removing local knowledge distillation
 
-Expected observations:
+Observed behavior:
 
-- Removing local KD may reduce consistency between local and global models.
-- Removing soft label correction may increase sensitivity to noisy labels.
-- Removing reliability weighting may allow corrupted clients to influence the global teacher more strongly.
-- Removing class-level reliability may reduce robustness when specific classes are corrupted more heavily.
+- Removing reliability weighting decreased global accuracy and Macro-F1 compared with the full method.
+- Removing class-level reliability produced similar global accuracy but slightly different worst-client behavior.
+- Removing soft label correction and removing local knowledge distillation achieved slightly higher final-round values in this specific ablation setting.
+- This indicates that the contribution of individual components is not always additive.
+- The interaction between reliability weighting, soft correction, and local distillation is dataset-dependent and seed-dependent.
 
-Robustness is expected to come from the combination of all components rather than one isolated mechanism.
+The ablation study shows that reliability weighting has the clearest positive contribution, while soft correction and local distillation may require additional hyperparameter tuning depending on the dataset and noise regime.
 
 ---
 
@@ -477,7 +605,17 @@ The project supports reproducibility through:
 - Configuration-based experiment setup
 - Consistent logging
 - Dataset-specific configuration classes
+- Identical noise settings across compared methods
+- Identical model architecture per dataset
 - Clean GitHub repository without local datasets or virtual environment files
+
+The implementation automatically selects the available device:
+
+1. CUDA
+2. Apple MPS
+3. CPU
+
+This allows the same codebase to run on different hardware environments.
 
 ---
 
@@ -493,9 +631,11 @@ The current project state is:
 - APTOS loader code is tracked in GitHub
 - CIFAR-10 and EMNIST are handled through automatic download
 - Main training pipeline is configurable through method switches
-- Jupyter notebooks are available only for validation and Colab-based testing
+- Jupyter notebooks are available for validation and Colab-based testing
 - Experiments were run using the required three seeds
-- Ablation was performed separately and not across all noise regimes
+- Baselines were evaluated across all required noise settings
+- Ablation was performed separately on CIFAR-10 under 40% symmetric noise
+- Final internship report, README, notebooks, and technical documentation were updated
 
 This repository state is appropriate because GitHub should contain the implementation and documentation, while large datasets should remain local or be downloaded through scripts.
 
@@ -508,10 +648,12 @@ The main limitations of the current project are:
 - APTOS experiments are computationally expensive.
 - APTOS class imbalance makes global accuracy insufficient by itself.
 - Some methods require careful hyperparameter tuning.
+- The contribution of individual R2D2-FL components is not always additive.
 - Results may differ depending on device type, batch size, and available compute resources.
 - APTOS requires manual local dataset placement because it cannot be automatically downloaded from GitHub.
+- The current implementation uses simulated federated learning rather than a real distributed deployment.
 
-These limitations should be clearly mentioned in the final discussion.
+These limitations are discussed in the final internship report.
 
 ---
 
@@ -534,4 +676,6 @@ The main contributions are:
 
 The project demonstrates how reliability-aware and distillation-based techniques can be used to improve robustness in noisy federated learning.
 
-The framework is suitable for further experimentation, result collection, ablation analysis, and final academic reporting.
+The results show that R2D2-FL performs especially well on CIFAR-10 and EMNIST, while APTOS 2019 remains more challenging due to class imbalance and medical image complexity.
+
+The framework is suitable for final academic reporting and future extensions, including additional datasets, stronger privacy mechanisms, and more systematic hyperparameter tuning.
