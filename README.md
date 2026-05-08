@@ -1,6 +1,6 @@
 # R2D2-FL: Reliability-Weighted Robust Distillation for Federated Learning
 
-This repository implements a modular Federated Learning (FL) framework for studying robustness under label noise and heterogeneous client data. It includes standard FL baselines and the proposed **Reliability-Weighted Robust Distillation (R2D2-FL)** method.
+This repository implements a modular Federated Learning (FL) framework for studying robustness under label noise and heterogeneous client data. It includes standard FL baselines, federated distillation baselines, noisy-label robust baselines, and the proposed **Reliability-Weighted Robust Distillation (R2D2-FL)** method.
 
 The project was developed and tested locally on macOS using Cursor/VS Code, with additional Jupyter/Colab notebooks kept only for validation and quick testing. The main implementation is contained in Python source files.
 
@@ -68,7 +68,7 @@ checkpoints/
 .DS_Store
 ```
 
-This prevents large datasets, virtual environments, and generated files from being accidentally uploaded to GitHub.
+This prevents large datasets, virtual environments, checkpoints, logs, and generated files from being accidentally uploaded to GitHub.
 
 ---
 
@@ -83,6 +83,8 @@ CIFAR-10 is downloaded automatically through `torchvision`.
 ### EMNIST
 
 EMNIST is downloaded automatically through `torchvision`.
+
+In this project, the EMNIST Digits split is used.
 
 ### APTOS 2019
 
@@ -189,6 +191,18 @@ Standard federated averaging baseline with local client training and weighted se
 
 FedAvg extension with a proximal regularization term to reduce client drift under heterogeneous data.
 
+### FedDF
+
+Federated distillation baseline using server-side proxy-based distillation from client model predictions.
+
+### Selective-FD
+
+Selective federated distillation baseline that filters ambiguous or unreliable predictions before distillation.
+
+### FedNoRo
+
+Noisy-label robust federated learning baseline designed for scenarios with corrupted local client labels.
+
 ### R2D2-FL
 
 The proposed method combines client-side noise-aware training and server-side reliability-weighted proxy distillation.
@@ -206,15 +220,19 @@ The proposed method combines client-side noise-aware training and server-side re
 - Reliability-weighted ensemble teacher
 - Proxy-based global distillation
 
-### Additional Method Switches
+### Method Switches
 
-The code also includes method switches for comparison and ablation experiments:
+The code includes method switches for comparison and ablation experiments:
 
 ```text
+USE_FEDPROX
 USE_FEDDF
+USE_R2D2
 USE_SELECTIVE_FD
 USE_FEDNORO
 ```
+
+These switches allow different methods and components to be enabled or disabled without rewriting the training pipeline.
 
 ---
 
@@ -245,7 +263,16 @@ The experiments were run for each dataset under the following noise settings:
 
 The experiments were repeated using three random seeds, as required for reproducibility.
 
-An ablation study was also conducted, but not across all noise settings. The ablation experiments were focused on the main noisy setting in order to evaluate the contribution of individual R2D2-FL components.
+The evaluated methods were:
+
+- FedAvg
+- FedProx
+- FedDF
+- Selective-FD
+- FedNoRo
+- R2D2-FL
+
+An ablation study was also conducted on **CIFAR-10 under 40% symmetric label noise**. The ablation experiments were focused on this main noisy setting in order to evaluate the contribution of individual R2D2-FL components.
 
 ---
 
@@ -332,7 +359,7 @@ The framework reports:
 - Round-wise training time
 - Communication cost estimate
 - Convergence across communication rounds
-- Best round performance
+- Best-round performance
 
 For APTOS, Macro-F1 is especially important because the dataset is imbalanced.
 
@@ -347,6 +374,8 @@ The project supports reproducibility through:
 - Configuration-based experiment control
 - Round-wise logging
 - Dataset-specific configuration classes
+- Identical noise settings across compared methods
+- Identical model architecture per dataset
 - Clean GitHub repository without local datasets or virtual environment files
 
 ---
@@ -361,7 +390,11 @@ The current repository state is:
 - APTOS dataset remains local
 - APTOS loading code is tracked in GitHub
 - CIFAR-10 and EMNIST are handled through automatic download
+- Three validation notebooks are included
 - Jupyter notebooks are kept only for validation and Colab testing
+- Final internship report and technical report are updated
+- Baselines and R2D2-FL were evaluated across all required noise settings
+- Ablation study was conducted on CIFAR-10 under 40% symmetric label noise
 
 This keeps the repository clean, lightweight, and suitable for academic review.
 
