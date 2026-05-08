@@ -3,9 +3,10 @@ venv/
 __pycache__/
 *.pyc
 
-data/
-*.tar.gz
-*.zip
+data/aptos/
+data/EMNIST/
+data/cifar-10-batches-py/
+data/cifar-10-python.tar.gz
 
 results/
 logs/
