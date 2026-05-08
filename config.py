@@ -11,7 +11,7 @@ class BaseConfig:
     DISTILL_LR = 0.001
 
     # Reproducibility
-    SEED = 3
+    SEED = 1
 
     # Device (prefer CUDA, then Apple MPS, then CPU)
     if torch.cuda.is_available():
@@ -152,8 +152,8 @@ class APTOSConfig(BaseConfig):
 
     # Noise
     NOISE_CLIENT_RATIO = 0.5
-    NOISE_RATE = 0.4
-    NOISE_TYPE = "heterogeneous"
+    NOISE_RATE = 0.0
+    NOISE_TYPE = "symmetric"
 
     # Proxy
     PROXY_SIZE = 200
