@@ -105,15 +105,20 @@ data/aptos_loader.py
 
 ---
 
-## Quick Validation Notebooks
+## Quick Validation in Google Colab
 
-The repository includes Jupyter notebooks for quick validation and Colab-based testing:
+The repository includes three Colab-ready notebooks for quick pipeline validation:
 
-- `test_cifar.ipynb`
-- `test_emnist.ipynb`
-- `test_aptos.ipynb`
+- **CIFAR-10 validation notebook**  
+  https://colab.research.google.com/github/astannnn/R2D2-FL-new/blob/main/test_cifar.ipynb
 
-These notebooks are intended to verify that the pipeline can load data, create client partitions, run a minimal training setup, and complete basic evaluation.
+- **EMNIST validation notebook**  
+  https://colab.research.google.com/github/astannnn/R2D2-FL-new/blob/main/test_emnist.ipynb
+
+- **APTOS validation notebook**  
+  https://colab.research.google.com/github/astannnn/R2D2-FL-new/blob/main/test_aptos.ipynb
+
+These notebooks are intended only for quick validation and Colab-based testing. They verify that the pipeline can load data, create client partitions, run a minimal training setup, and complete basic evaluation.
 
 They are not the main implementation. The main training logic is implemented in:
 
